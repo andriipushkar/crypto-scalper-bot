@@ -1,0 +1,23 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: trading-dashboard-pdb
+  namespace: trading-bot-prod
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: trading-bot
+      component: dashboard
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: trading-bot-pdb
+  namespace: trading-bot-prod
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: trading-bot
+      component: bot

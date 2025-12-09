@@ -1,0 +1,27 @@
+{{- if and .Values.tradingBot.enabled .Values.tradingBot.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "crypto-scalper-bot.fullname" . }}-bot
+  labels:
+    {{- include "crypto-scalper-bot.tradingBot.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.tradingBot.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "crypto-scalper-bot.tradingBot.selectorLabels" . | nindent 6 }}
+{{- end }}
+---
+{{- if and .Values.dashboard.enabled .Values.dashboard.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "crypto-scalper-bot.fullname" . }}-dashboard
+  labels:
+    {{- include "crypto-scalper-bot.dashboard.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.dashboard.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "crypto-scalper-bot.dashboard.selectorLabels" . | nindent 6 }}
+{{- end }}

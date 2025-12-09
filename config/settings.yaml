@@ -1,0 +1,123 @@
+# Trading Bot Configuration
+# Environment-specific values should be in .env file
+
+exchange:
+  name: binance_futures
+  # testnet: true will use testnet.binancefuture.com
+  # testnet: false will use fapi.binance.com
+  testnet: true
+  
+  # Environment variable names for API keys
+  api_key_env: BINANCE_TESTNET_API_KEY
+  api_secret_env: BINANCE_TESTNET_API_SECRET
+  
+  # WebSocket settings
+  websocket:
+    ping_interval: 30  # seconds
+    ping_timeout: 10   # seconds
+    reconnect_delay: 5 # seconds
+    max_reconnect_attempts: 10
+
+trading:
+  # Symbols to trade
+  symbols:
+    - BTCUSDT
+    - ETHUSDT
+    - SOLUSDT
+
+  # Default leverage (can be overridden per symbol)
+  leverage: 10
+
+  # Margin type: CROSSED or ISOLATED
+  margin_type: CROSSED
+
+  # Per-symbol configuration (optional overrides)
+  symbol_config:
+    BTCUSDT:
+      leverage: 10
+      max_position_usd: 50  # Max position size in USD
+      tick_size: 0.1
+      min_qty: 0.001
+    ETHUSDT:
+      leverage: 10
+      max_position_usd: 50
+      tick_size: 0.01
+      min_qty: 0.001
+    SOLUSDT:
+      leverage: 10
+      max_position_usd: 30
+      tick_size: 0.001
+      min_qty: 0.1
+
+  # Order settings
+  orders:
+    # Use LIMIT orders for lower fees
+    default_type: LIMIT
+    # Time in force: GTC, IOC, FOK
+    time_in_force: GTC
+    # Price offset from mid for limit orders (in ticks)
+    limit_offset_ticks: 1
+
+strategies:
+  orderbook_imbalance:
+    enabled: true
+    # Ratio of bid/ask volume to trigger signal
+    imbalance_threshold: 1.5
+    # Maximum spread to trade (0.05% = 0.0005)
+    max_spread: 0.0005
+    # Cooldown between signals (seconds)
+    signal_cooldown: 10
+    # Number of order book levels to analyze
+    levels: 5
+    # Minimum volume in USD to consider
+    min_volume_usd: 5000
+  
+  volume_spike:
+    enabled: true
+    # Volume must be X times average
+    volume_multiplier: 3.0
+    # Lookback period for average (seconds)
+    lookback_seconds: 60
+    # Minimum spike volume in USD
+    min_volume_usd: 10000
+    # Signal cooldown (seconds)
+    signal_cooldown: 15
+  
+  funding_rate:
+    enabled: false  # Disabled by default
+    # Threshold to consider significant
+    rate_threshold: 0.0001  # 0.01%
+    # Weight in combined signal
+    signal_weight: 0.3
+
+data:
+  # Order book depth to maintain locally
+  orderbook_depth: 20
+  
+  # Storage settings
+  storage:
+    # SQLite database path
+    database_path: data/raw/market_data.db
+    # How often to flush to disk (seconds)
+    flush_interval: 60
+    # Keep raw data for X days
+    retention_days: 30
+
+logging:
+  # Level: DEBUG, INFO, WARNING, ERROR
+  level: INFO
+  
+  # Log to console
+  console: true
+  
+  # Log to file
+  file:
+    enabled: true
+    path: data/logs/trading.log
+    # Rotate daily
+    rotation: "1 day"
+    # Keep 30 days of logs
+    retention: "30 days"
+  
+  # Log format
+  format: "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}"

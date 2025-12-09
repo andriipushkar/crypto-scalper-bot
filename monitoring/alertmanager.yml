@@ -1,0 +1,86 @@
+# Alertmanager Configuration
+global:
+  # Telegram notification settings
+  telegram_api_url: 'https://api.telegram.org'
+
+route:
+  # Default receiver
+  receiver: 'telegram-notifications'
+
+  # Group alerts by these labels
+  group_by: ['alertname', 'severity']
+
+  # Wait before sending first alert
+  group_wait: 30s
+
+  # Wait before sending subsequent alerts
+  group_interval: 5m
+
+  # Resend interval
+  repeat_interval: 4h
+
+  # Route specific alerts
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'telegram-critical'
+      group_wait: 10s
+      repeat_interval: 1h
+
+    # Warning alerts
+    - match:
+        severity: warning
+      receiver: 'telegram-notifications'
+      group_wait: 1m
+      repeat_interval: 4h
+
+    # Info alerts - less frequent
+    - match:
+        severity: info
+      receiver: 'telegram-notifications'
+      group_wait: 5m
+      repeat_interval: 12h
+
+receivers:
+  # Telegram for critical alerts
+  - name: 'telegram-critical'
+    telegram_configs:
+      - bot_token: '${TELEGRAM_BOT_TOKEN}'
+        chat_id: ${TELEGRAM_CHAT_ID}
+        parse_mode: 'HTML'
+        message: |
+          🚨 <b>CRITICAL ALERT</b>
+
+          <b>{{ .CommonAnnotations.summary }}</b>
+          {{ .CommonAnnotations.description }}
+
+          <i>{{ .CommonLabels.alertname }}</i>
+
+  # Telegram for regular notifications
+  - name: 'telegram-notifications'
+    telegram_configs:
+      - bot_token: '${TELEGRAM_BOT_TOKEN}'
+        chat_id: ${TELEGRAM_CHAT_ID}
+        parse_mode: 'HTML'
+        message: |
+          {{ if eq .Status "firing" }}⚠️{{ else }}✅{{ end }} <b>{{ .Status | toUpper }}</b>
+
+          {{ range .Alerts }}
+          <b>{{ .Annotations.summary }}</b>
+          {{ .Annotations.description }}
+          {{ end }}
+
+# Inhibition rules - suppress lower severity alerts when higher ones fire
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname']
+
+  - source_match:
+      severity: 'warning'
+    target_match:
+      severity: 'info'
+    equal: ['alertname']

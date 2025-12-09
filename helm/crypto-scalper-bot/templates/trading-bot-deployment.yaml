@@ -1,0 +1,88 @@
+{{- if .Values.tradingBot.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "crypto-scalper-bot.fullname" . }}-bot
+  labels:
+    {{- include "crypto-scalper-bot.tradingBot.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.tradingBot.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "crypto-scalper-bot.tradingBot.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "crypto-scalper-bot.tradingBot.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "crypto-scalper-bot.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "crypto-scalper-bot.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: trading-bot
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.global.imageRegistry }}{{ .Values.tradingBot.image.repository }}:{{ .Values.tradingBot.image.tag }}"
+          imagePullPolicy: {{ .Values.tradingBot.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "crypto-scalper-bot.fullname" . }}-config
+            - secretRef:
+                name: {{ include "crypto-scalper-bot.fullname" . }}-secrets
+          {{- if .Values.extraEnv }}
+          env:
+            {{- toYaml .Values.extraEnv | nindent 12 }}
+          {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.tradingBot.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.tradingBot.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.tradingBot.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.extraVolumeMounts }}
+            {{- toYaml .Values.extraVolumeMounts | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "crypto-scalper-bot.fullname" . }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.extraVolumes }}
+        {{- toYaml .Values.extraVolumes | nindent 8 }}
+        {{- end }}
+      {{- with .Values.tradingBot.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tradingBot.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tradingBot.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

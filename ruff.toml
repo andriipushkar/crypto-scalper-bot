@@ -1,0 +1,63 @@
+# Ruff configuration for crypto-scalper-bot
+
+[lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "SIM",    # flake8-simplify
+    "TCH",    # flake8-type-checking
+    "PTH",    # flake8-use-pathlib
+    "ERA",    # eradicate (commented-out code)
+    "RUF",    # Ruff-specific rules
+]
+
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # function call in default argument
+    "B904",   # raise without from inside except
+    "ARG001", # unused function argument
+    "ARG002", # unused method argument
+    "SIM108", # ternary operator
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["ARG", "S101"]
+"scripts/*" = ["T201"]
+
+[lint.isort]
+known-first-party = ["src"]
+force-single-line = false
+lines-after-imports = 2
+
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true
+
+# Target Python 3.11
+target-version = "py311"
+
+# Line length
+line-length = 100
+
+# Exclude paths
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist",
+    ".eggs",
+    "*.egg-info",
+    "data/",
+    "logs/",
+]

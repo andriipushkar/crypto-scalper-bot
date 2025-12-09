@@ -1,0 +1,91 @@
+# Production environment values
+
+global:
+  environment: production
+
+tradingBot:
+  config:
+    paperTrading: false
+    logLevel: WARNING
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+dashboard:
+  replicaCount: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  pdb:
+    enabled: true
+    minAvailable: 2
+
+ingress:
+  enabled: true
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+  hosts:
+    - host: trading.yourdomain.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: dashboard
+  tls:
+    - secretName: trading-tls
+      hosts:
+        - trading.yourdomain.com
+
+redis:
+  architecture: replication
+  replica:
+    replicaCount: 2
+  master:
+    persistence:
+      size: 5Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+postgresql:
+  primary:
+    persistence:
+      size: 50Gi
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+persistence:
+  size: 20Gi
+  storageClass: fast-ssd
+
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+  prometheusRule:
+    enabled: true

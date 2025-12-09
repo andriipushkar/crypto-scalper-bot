@@ -1,0 +1,168 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trading-bot
+  namespace: trading-bot
+  labels:
+    app: trading-bot
+    component: bot
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # Only one instance for trading bot
+  selector:
+    matchLabels:
+      app: trading-bot
+      component: bot
+  template:
+    metadata:
+      labels:
+        app: trading-bot
+        component: bot
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: trading-bot
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: bot
+          image: crypto-scalper-bot:latest
+          imagePullPolicy: Always
+
+          ports:
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+
+          envFrom:
+            - configMapRef:
+                name: trading-bot-config
+            - secretRef:
+                name: trading-bot-secrets
+
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9090
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9090
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: logs
+              mountPath: /app/logs
+
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: trading-bot-data
+        - name: logs
+          emptyDir: {}
+
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trading-dashboard
+  namespace: trading-bot
+  labels:
+    app: trading-bot
+    component: dashboard
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: trading-bot
+      component: dashboard
+  template:
+    metadata:
+      labels:
+        app: trading-bot
+        component: dashboard
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+
+      containers:
+        - name: dashboard
+          image: crypto-scalper-bot:latest
+          imagePullPolicy: Always
+          command: ["uvicorn"]
+          args:
+            - "src.web.app:create_app"
+            - "--factory"
+            - "--host=0.0.0.0"
+            - "--port=8080"
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          envFrom:
+            - configMapRef:
+                name: trading-bot-config
+            - secretRef:
+                name: trading-bot-secrets
+
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+      restartPolicy: Always

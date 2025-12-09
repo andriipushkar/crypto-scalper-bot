@@ -1,0 +1,58 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv/
+ENV/
+.eggs/
+*.egg-info/
+*.egg
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+
+# Data (mount as volume instead)
+data/raw/*.db
+data/logs/*.log
+data/models/*.pkl
+data/models/*.h5
+
+# Environment files (use env_file in docker-compose)
+.env
+.env.local
+.env.production
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Notebooks
+notebooks/
+*.ipynb
+
+# Temp files
+*.tmp
+*.temp
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db

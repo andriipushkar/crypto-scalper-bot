@@ -1,0 +1,94 @@
+# Risk Management Configuration
+# CRITICAL: These settings protect your capital
+
+limits:
+  # Maximum position size in USD
+  # With $100 capital and 10x leverage, max exposure is $1000
+  # We limit to $30 (30% of capital) per position
+  max_position_usd: 30.0
+  
+  # Maximum daily loss in USD
+  # Stop trading when daily P&L reaches -$5
+  max_daily_loss_usd: 5.0
+  
+  # Maximum profit target per day (optional)
+  # Can help lock in gains
+  max_daily_profit_usd: 10.0
+  
+  # Maximum number of trades per day
+  # Prevents overtrading and excessive fees
+  max_trades_per_day: 20
+  
+  # Maximum consecutive losses before pause
+  # Helps prevent tilt trading
+  max_consecutive_losses: 3
+  
+  # Pause duration after max consecutive losses (minutes)
+  loss_pause_minutes: 30
+  
+  # Maximum open positions at once
+  max_open_positions: 1
+  
+  # Maximum position hold time (seconds)
+  # Force close if position held too long
+  position_timeout_seconds: 300  # 5 minutes
+
+position:
+  # Default stop loss percentage
+  # 0.5% = close at 0.5% loss
+  default_stop_loss_pct: 0.5
+  
+  # Default take profit percentage
+  # 0.3% = close at 0.3% profit
+  default_take_profit_pct: 0.3
+  
+  # Use trailing stop
+  trailing_stop_enabled: false
+  trailing_stop_pct: 0.2
+  
+  # Adjust position size based on recent performance
+  dynamic_sizing:
+    enabled: true
+    # Reduce size by this factor when in drawdown
+    drawdown_reduction: 0.5
+    # Threshold to trigger reduction
+    drawdown_threshold_pct: 10.0
+
+fees:
+  # Binance Futures fees (used in calculations)
+  # These are default rates, may differ based on your VIP level
+  maker: 0.0002  # 0.02%
+  taker: 0.0004  # 0.04%
+  
+  # Always account for fees in profit calculations
+  include_in_signals: true
+
+circuit_breakers:
+  # Emergency stop conditions
+  
+  # Stop if equity drops below this USD
+  min_equity_usd: 50.0
+  
+  # Stop if price moves more than X% in 1 minute
+  max_price_move_1m_pct: 5.0
+  
+  # Stop if latency exceeds X ms
+  max_latency_ms: 1000
+  
+  # Stop if order fill rate drops below X%
+  min_fill_rate_pct: 50.0
+
+notifications:
+  # Send alerts for important events
+  
+  # Alert when daily loss limit approaching
+  daily_loss_warning_pct: 80  # Alert at 80% of limit
+  
+  # Alert on large single trade loss
+  large_loss_usd: 3.0
+  
+  # Alert on position timeout
+  position_timeout_alert: true
+  
+  # Alert on circuit breaker trigger
+  circuit_breaker_alert: true

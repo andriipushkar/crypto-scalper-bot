@@ -1,0 +1,13 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "crypto-scalper-bot.fullname" . }}
+  labels:
+    {{- include "crypto-scalper-bot.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: crypto-scalper-bot
+      rules:
+        {{- toYaml .Values.monitoring.prometheusRule.rules | nindent 8 }}
+{{- end }}

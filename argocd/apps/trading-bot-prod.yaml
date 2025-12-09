@@ -1,0 +1,60 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: trading-bot-prod
+  namespace: argocd
+  labels:
+    environment: production
+    app: trading-bot
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: trading-alerts
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: trading-alerts
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: trading-alerts
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: trading-bot
+
+  source:
+    repoURL: https://github.com/your-org/crypto-scalper-bot.git
+    targetRevision: v1.0.0  # Use specific version tag
+    path: helm/crypto-scalper-bot
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-prod.yaml
+      parameters:
+        - name: global.environment
+          value: production
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: trading-bot-prod
+
+  # Production: manual sync only
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 2
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 1m
+
+  # Ignore replica differences (HPA manages this)
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    - group: autoscaling
+      kind: HorizontalPodAutoscaler
+      jsonPointers:
+        - /spec/minReplicas
+        - /spec/maxReplicas
+
+  revisionHistoryLimit: 20

@@ -1,0 +1,75 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: trading-bot
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Crypto Scalper Trading Bot Project
+
+  # Source repositories
+  sourceRepos:
+    - 'https://github.com/your-org/crypto-scalper-bot.git'
+    - 'https://charts.bitnami.com/bitnami'
+
+  # Destination clusters and namespaces
+  destinations:
+    - namespace: trading-bot-dev
+      server: https://kubernetes.default.svc
+    - namespace: trading-bot-staging
+      server: https://kubernetes.default.svc
+    - namespace: trading-bot-prod
+      server: https://kubernetes.default.svc
+
+  # Allowed cluster resources
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: 'networking.k8s.io'
+      kind: Ingress
+    - group: 'policy'
+      kind: PodDisruptionBudget
+
+  # Namespace resources
+  namespaceResourceWhitelist:
+    - group: ''
+      kind: '*'
+    - group: 'apps'
+      kind: '*'
+    - group: 'autoscaling'
+      kind: '*'
+    - group: 'networking.k8s.io'
+      kind: '*'
+    - group: 'monitoring.coreos.com'
+      kind: '*'
+
+  # Roles for the project
+  roles:
+    - name: developer
+      description: Developer role
+      policies:
+        - p, proj:trading-bot:developer, applications, get, trading-bot/*, allow
+        - p, proj:trading-bot:developer, applications, sync, trading-bot/*-dev, allow
+      groups:
+        - trading-developers
+
+    - name: admin
+      description: Admin role
+      policies:
+        - p, proj:trading-bot:admin, applications, *, trading-bot/*, allow
+        - p, proj:trading-bot:admin, repositories, *, trading-bot/*, allow
+      groups:
+        - trading-admins
+
+  # Sync windows
+  syncWindows:
+    # Block prod deployments during trading hours
+    - kind: deny
+      schedule: '0 8-22 * * 1-5'  # Mon-Fri 8:00-22:00 UTC
+      duration: 14h
+      applications:
+        - '*-prod'
+      namespaces:
+        - trading-bot-prod
+      manualSync: true  # Allow manual sync during window

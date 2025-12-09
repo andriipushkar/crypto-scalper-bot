@@ -1,0 +1,47 @@
+# Development environment values
+
+global:
+  environment: development
+
+tradingBot:
+  config:
+    paperTrading: true
+    logLevel: DEBUG
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+dashboard:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+
+ingress:
+  enabled: true
+  hosts:
+    - host: trading-dev.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: dashboard
+  tls: []
+
+redis:
+  master:
+    persistence:
+      size: 512Mi
+
+postgresql:
+  primary:
+    persistence:
+      size: 1Gi
+
+persistence:
+  size: 1Gi
+
+monitoring:
+  enabled: false

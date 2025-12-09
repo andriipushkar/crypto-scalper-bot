@@ -1,0 +1,161 @@
+# Prometheus Alert Rules for Crypto Scalper Bot
+groups:
+  # ===========================================================================
+  # Trading Alerts
+  # ===========================================================================
+  - name: trading_alerts
+    rules:
+      # High drawdown alert
+      - alert: HighDrawdown
+        expr: trading_drawdown_percent > 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High drawdown detected"
+          description: "Drawdown is {{ $value }}% (threshold: 5%)"
+
+      # Daily loss limit approaching
+      - alert: DailyLossLimitApproaching
+        expr: trading_daily_pnl_usd < -4
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Approaching daily loss limit"
+          description: "Daily P&L is ${{ $value }} (limit: -$5)"
+
+      # No trades for extended period
+      - alert: NoTradingActivity
+        expr: increase(trading_total_trades[1h]) == 0
+        for: 2h
+        labels:
+          severity: warning
+        annotations:
+          summary: "No trading activity"
+          description: "No trades executed in the last 2 hours"
+
+      # Win rate dropping
+      - alert: LowWinRate
+        expr: trading_win_rate_percent < 40
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low win rate"
+          description: "Win rate is {{ $value }}% (threshold: 40%)"
+
+      # Large position size
+      - alert: LargePositionSize
+        expr: trading_position_size_usd > 60
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Large position detected"
+          description: "Position size is ${{ $value }} (threshold: $60)"
+
+  # ===========================================================================
+  # System Alerts
+  # ===========================================================================
+  - name: system_alerts
+    rules:
+      # Bot not responding
+      - alert: BotDown
+        expr: up{job="scalper-bot"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Trading bot is down"
+          description: "The trading bot has been unreachable for more than 1 minute"
+
+      # Dashboard not responding
+      - alert: DashboardDown
+        expr: up{job="scalper-dashboard"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Dashboard is down"
+          description: "The dashboard has been unreachable for more than 2 minutes"
+
+      # High latency
+      - alert: HighLatency
+        expr: trading_order_latency_ms_p95 > 500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High order latency"
+          description: "P95 order latency is {{ $value }}ms (threshold: 500ms)"
+
+      # WebSocket disconnected
+      - alert: WebSocketDisconnected
+        expr: trading_websocket_connected == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "WebSocket disconnected"
+          description: "WebSocket connection to exchange is down"
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: rate(trading_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate"
+          description: "Error rate is {{ $value }} errors/sec"
+
+  # ===========================================================================
+  # Resource Alerts
+  # ===========================================================================
+  - name: resource_alerts
+    rules:
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / 1024 / 1024 > 1500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}MB (threshold: 1500MB)"
+
+      # Database size growing
+      - alert: LargeDatabaseSize
+        expr: trading_database_size_bytes / 1024 / 1024 > 1000
+        for: 1h
+        labels:
+          severity: info
+        annotations:
+          summary: "Large database size"
+          description: "Database size is {{ $value }}MB"
+
+  # ===========================================================================
+  # Market Alerts
+  # ===========================================================================
+  - name: market_alerts
+    rules:
+      # High spread
+      - alert: HighSpread
+        expr: trading_spread_bps > 10
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "High spread detected"
+          description: "Spread is {{ $value }} bps (threshold: 10 bps)"
+
+      # Funding rate extreme
+      - alert: ExtremeFundingRate
+        expr: abs(trading_funding_rate) > 0.001
+        for: 1m
+        labels:
+          severity: info
+        annotations:
+          summary: "Extreme funding rate"
+          description: "Funding rate is {{ $value }} (threshold: 0.1%)"

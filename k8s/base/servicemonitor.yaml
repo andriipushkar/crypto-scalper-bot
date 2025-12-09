@@ -1,0 +1,21 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: trading-bot-monitor
+  namespace: trading-bot
+  labels:
+    app: trading-bot
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: trading-bot
+      component: bot
+  endpoints:
+    - port: metrics
+      interval: 15s
+      path: /metrics
+      scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+      - trading-bot

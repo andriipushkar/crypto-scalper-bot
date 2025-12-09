@@ -1,0 +1,48 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: trading-bot-staging
+  namespace: argocd
+  labels:
+    environment: staging
+    app: trading-bot
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: trading-bot
+
+  source:
+    repoURL: https://github.com/your-org/crypto-scalper-bot.git
+    targetRevision: main
+    path: helm/crypto-scalper-bot
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-prod.yaml  # Use prod values but with staging overrides
+      parameters:
+        - name: global.environment
+          value: staging
+        - name: tradingBot.config.paperTrading
+          value: "true"
+        - name: ingress.hosts[0].host
+          value: trading-staging.yourdomain.com
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: trading-bot-staging
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 2m
+
+  revisionHistoryLimit: 10

@@ -1,0 +1,56 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: trading-bot-environments
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - environment: dev
+            namespace: trading-bot-dev
+            branch: develop
+            valuesFile: values-dev.yaml
+            autoSync: true
+          - environment: staging
+            namespace: trading-bot-staging
+            branch: main
+            valuesFile: values-prod.yaml
+            autoSync: true
+          - environment: prod
+            namespace: trading-bot-prod
+            branch: main
+            valuesFile: values-prod.yaml
+            autoSync: false
+
+  template:
+    metadata:
+      name: 'trading-bot-{{environment}}'
+      labels:
+        environment: '{{environment}}'
+        app: trading-bot
+    spec:
+      project: trading-bot
+
+      source:
+        repoURL: https://github.com/your-org/crypto-scalper-bot.git
+        targetRevision: '{{branch}}'
+        path: helm/crypto-scalper-bot
+        helm:
+          valueFiles:
+            - values.yaml
+            - '{{valuesFile}}'
+          parameters:
+            - name: global.environment
+              value: '{{environment}}'
+
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{namespace}}'
+
+      syncPolicy:
+        automated:
+          prune: '{{autoSync}}'
+          selfHeal: '{{autoSync}}'
+        syncOptions:
+          - CreateNamespace=true

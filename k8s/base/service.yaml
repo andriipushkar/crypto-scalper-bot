@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: trading-bot-metrics
+  namespace: trading-bot
+  labels:
+    app: trading-bot
+    component: bot
+spec:
+  selector:
+    app: trading-bot
+    component: bot
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trading-dashboard
+  namespace: trading-bot
+  labels:
+    app: trading-bot
+    component: dashboard
+spec:
+  selector:
+    app: trading-bot
+    component: dashboard
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
