@@ -1,0 +1,135 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# MULTI-EXCHANGE ARBITRAGE CONFIGURATION
+# ═══════════════════════════════════════════════════════════════════════════
+# This configuration enables trading across multiple exchanges to capture
+# arbitrage opportunities and get best execution prices.
+#
+# Requirements:
+# - API keys for all exchanges
+# - Sufficient balance on each exchange
+# - Fast, stable internet connection
+# - Understanding of exchange-specific fees
+# ═══════════════════════════════════════════════════════════════════════════
+
+trading:
+  symbols:
+    - BTCUSDT
+    - ETHUSDT
+    - BNBUSDT
+
+  leverage: 5
+
+  paper_trading: true
+
+  # Enable all exchanges
+  exchanges:
+    binance:
+      enabled: true
+      testnet: false
+      priority: 1         # Primary exchange
+
+    bybit:
+      enabled: true
+      testnet: false
+      priority: 2
+
+    okx:
+      enabled: true
+      testnet: false
+      priority: 3
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MULTI-EXCHANGE SPECIFIC SETTINGS
+# ═══════════════════════════════════════════════════════════════════════════
+execution:
+  # Smart order routing
+  routing:
+    enabled: true
+    mode: best_price      # best_price, lowest_latency, split
+
+  # Order splitting for large orders
+  split_orders:
+    enabled: true
+    max_single_order_pct: 0.5    # Split if >50% of orderbook
+
+  # Failover settings
+  failover:
+    enabled: true
+    max_retries: 3
+    fallback_exchange: binance
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ARBITRAGE STRATEGY
+# ═══════════════════════════════════════════════════════════════════════════
+strategies:
+  # Cross-exchange arbitrage
+  arbitrage:
+    enabled: true
+    min_spread: 0.0015            # 0.15% minimum spread
+    max_execution_time: 1.5       # Max 1.5 seconds
+    max_position_per_arb: 0.05    # 5% of balance per arb
+
+    # Account for fees in spread calculation
+    include_fees: true
+
+    # Exchanges for arbitrage
+    exchanges:
+      - binance
+      - bybit
+      - okx
+
+  # Triangular arbitrage (same exchange)
+  triangular_arbitrage:
+    enabled: true
+    min_profit: 0.001             # 0.1% minimum profit
+    base_currencies:
+      - USDT
+      - BTC
+      - ETH
+
+  # Disable other strategies for pure arbitrage
+  momentum:
+    enabled: false
+
+  orderbook_imbalance:
+    enabled: false
+
+  volume_spike:
+    enabled: false
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RISK MANAGEMENT FOR MULTI-EXCHANGE
+# ═══════════════════════════════════════════════════════════════════════════
+risk:
+  max_position_size: 0.10
+  max_daily_loss: 200
+  max_drawdown: 0.10
+  risk_per_trade: 0.01
+  max_positions: 3
+
+  # Per-exchange limits
+  per_exchange_limits:
+    max_exposure_pct: 0.5         # Max 50% on single exchange
+    max_open_orders: 10
+
+  # Rebalancing
+  rebalancing:
+    enabled: true
+    threshold_pct: 0.20           # Rebalance when 20% off target
+    target_allocation:
+      binance: 0.50
+      bybit: 0.30
+      okx: 0.20
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MONITORING
+# ═══════════════════════════════════════════════════════════════════════════
+monitoring:
+  # Track exchange-specific metrics
+  per_exchange_metrics: true
+
+  # Alert on exchange issues
+  exchange_health_alerts: true
+
+  # Latency monitoring
+  latency_threshold_ms: 500

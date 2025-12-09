@@ -1,21 +1,106 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# PROJECT CONFIGURATION
+# ═══════════════════════════════════════════════════════════════════════════
+
 [project]
 name = "crypto-scalper-bot"
-version = "0.1.0"
-description = "Automated scalping trading bot for Binance Futures"
+version = "1.0.0"
+description = "Production-ready automated scalping system for cryptocurrency futures trading"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Your Name", email = "your@email.com"}
 ]
+keywords = ["crypto", "trading", "bot", "scalping", "futures", "binance", "bybit"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/crypto-scalper-bot"
+Documentation = "https://github.com/your-org/crypto-scalper-bot#readme"
+Repository = "https://github.com/your-org/crypto-scalper-bot.git"
+Issues = "https://github.com/your-org/crypto-scalper-bot/issues"
 
 [project.scripts]
 collect-data = "scripts.collect_data:main"
 paper-trade = "scripts.paper_trade:main"
 
+# ═══════════════════════════════════════════════════════════════════════════
+# RUFF - LINTING & FORMATTING
+# ═══════════════════════════════════════════════════════════════════════════
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+exclude = [
+    ".git",
+    ".github",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "data",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "SIM",    # flake8-simplify
+    "TCH",    # flake8-type-checking
+    "PTH",    # flake8-use-pathlib
+    "PL",     # Pylint
+    "RUF",    # Ruff-specific rules
+]
+ignore = [
+    "E501",    # line too long (handled by formatter)
+    "B008",    # function call in default argument
+    "PLR0913", # too many arguments
+    "PLR2004", # magic value comparison
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["ARG", "PLR"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+force-single-line = false
+lines-after-imports = 2
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BLACK (legacy, ruff format preferred)
+# ═══════════════════════════════════════════════════════════════════════════
+
 [tool.black]
-line-length = 88
-target-version = ['py311']
+line-length = 100
+target-version = ['py310', 'py311', 'py312']
 include = '\.pyi?$'
 exclude = '''
 /(
@@ -26,42 +111,110 @@ exclude = '''
 )/
 '''
 
-[tool.ruff]
-line-length = 88
-select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # Pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "C4",  # flake8-comprehensions
-]
-ignore = [
-    "E501",  # line too long (handled by black)
-]
-exclude = [
-    ".git",
-    ".venv",
-    "__pycache__",
-    "data",
-]
+# ═══════════════════════════════════════════════════════════════════════════
+# MYPY - TYPE CHECKING
+# ═══════════════════════════════════════════════════════════════════════════
 
 [tool.mypy]
 python_version = "3.11"
+strict = false
 warn_return_any = true
+warn_unused_ignores = true
 warn_unused_configs = true
+warn_redundant_casts = true
 ignore_missing_imports = true
 exclude = [
-    "venv",
-    "data",
+    "tests/",
+    "venv/",
+    ".venv/",
+    "data/",
 ]
 
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PYTEST - TESTING
+# ═══════════════════════════════════════════════════════════════════════════
+
 [tool.pytest.ini_options]
+minversion = "7.0"
 asyncio_mode = "auto"
 testpaths = ["tests"]
-python_files = "test_*.py"
-python_functions = "test_*"
-addopts = "-v --tb=short"
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-ra",
+    "-q",
+    "--strict-markers",
+    "--strict-config",
+    "-v",
+    "--tb=short",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "e2e: marks tests as end-to-end tests",
+]
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COVERAGE
+# ═══════════════════════════════════════════════════════════════════════════
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = [
+    "tests/*",
+    "**/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]
+show_missing = true
+precision = 2
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BANDIT - SECURITY
+# ═══════════════════════════════════════════════════════════════════════════
+
+[tool.bandit]
+exclude_dirs = ["tests", "venv", ".venv"]
+skips = ["B101", "B311"]
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COMMITIZEN - CONVENTIONAL COMMITS
+# ═══════════════════════════════════════════════════════════════════════════
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "1.0.0"
+version_files = [
+    "pyproject.toml:version",
+]
+tag_format = "v$version"
+update_changelog_on_bump = true
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BUILD SYSTEM
+# ═══════════════════════════════════════════════════════════════════════════
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]

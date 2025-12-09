@@ -1,0 +1,120 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# AGGRESSIVE TRADING CONFIGURATION
+# ═══════════════════════════════════════════════════════════════════════════
+# This configuration is designed for experienced traders with high risk
+# tolerance seeking maximum returns.
+#
+# WARNING: This configuration can result in significant losses!
+#
+# Recommended for:
+# - Experienced traders with proven track record
+# - Large accounts that can absorb losses
+# - Traders who actively monitor positions
+# - Use only after extensive backtesting
+# ═══════════════════════════════════════════════════════════════════════════
+
+trading:
+  # Multiple high-volume pairs
+  symbols:
+    - BTCUSDT
+    - ETHUSDT
+    - BNBUSDT
+    - SOLUSDT
+    - XRPUSDT
+
+  # High leverage (use with extreme caution!)
+  leverage: 20
+
+  # Paper trading disabled for live trading
+  paper_trading: false
+
+  # Primary exchange
+  default_exchange: binance
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AGGRESSIVE RISK SETTINGS
+# ═══════════════════════════════════════════════════════════════════════════
+risk:
+  # Larger position sizes (20% max)
+  max_position_size: 0.20
+
+  # Higher daily loss tolerance
+  max_daily_loss: 500
+
+  # Accept higher drawdowns
+  max_drawdown: 0.20
+
+  # Aggressive risk per trade (2%)
+  risk_per_trade: 0.02
+
+  # Multiple concurrent positions
+  max_positions: 5
+
+  # No timeout - let trades run
+  position_timeout: 0
+
+  # Tight stop-loss for quick exits
+  default_stop_loss_pct: 1.5
+
+  # High take-profit targets
+  default_take_profit_pct: 4.0
+
+  # Enable trailing stops
+  trailing_stop_enabled: true
+  trailing_stop_pct: 0.8
+
+# ═══════════════════════════════════════════════════════════════════════════
+# STRATEGY SETTINGS - ALL STRATEGIES ENABLED
+# ═══════════════════════════════════════════════════════════════════════════
+strategies:
+  momentum:
+    enabled: true
+    rsi_period: 7         # Faster signals
+    overbought: 65        # More frequent triggers
+    oversold: 35
+
+  orderbook_imbalance:
+    enabled: true
+    threshold: 1.3        # Lower threshold = more signals
+    levels: 5
+
+  volume_spike:
+    enabled: true
+    multiplier: 2.5       # More sensitive
+    lookback_seconds: 30  # Faster reaction
+
+  ml_signals:
+    enabled: true
+    model_path: models/aggressive_rf_model.pkl
+    confidence_threshold: 0.6   # Lower confidence OK
+
+  sentiment:
+    enabled: true
+    sources:
+      - twitter
+      - reddit
+      - fear_greed
+    weight: 0.2
+
+  arbitrage:
+    enabled: false        # Requires multi-exchange setup
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NOTIFICATIONS
+# ═══════════════════════════════════════════════════════════════════════════
+notifications:
+  telegram:
+    enabled: true
+    trade_alerts: true
+    signal_alerts: false  # Too many signals
+    daily_summary: true
+    risk_warnings: true
+    error_alerts: true
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LOGGING
+# ═══════════════════════════════════════════════════════════════════════════
+logging:
+  level: INFO
+  save_all_signals: false
+  save_orderbook_snapshots: false

@@ -22,6 +22,8 @@ Production-ready automated scalping system for cryptocurrency futures trading wi
 - [Monitoring](#monitoring)
 - [API Reference](#api-reference)
 - [Testing](#testing)
+- [CI/CD](#cicd)
+- [Development](#development)
 - [Performance](#performance)
 - [Security](#security)
 - [Contributing](#contributing)
@@ -213,6 +215,25 @@ JWT_SECRET_KEY=your_jwt_secret
 # MESSAGE QUEUE
 # ═══════════════════════════════════════════════════════════════════
 KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+```
+
+### Example Configurations
+
+Ready-to-use configurations for different trading styles:
+
+| Config | Description | Risk Level |
+|--------|-------------|------------|
+| `config-conservative.yaml` | Low risk, 3x leverage, single position | Low |
+| `config-aggressive.yaml` | High risk, 20x leverage, all strategies | High |
+| `config-multi-exchange.yaml` | Multi-exchange arbitrage setup | Medium |
+| `config-ml-focused.yaml` | ML/AI-driven trading with sentiment | Medium |
+
+```bash
+# Use example configuration
+cp examples/config-conservative.yaml config/settings.yaml
+
+# Or specify directly
+python -m src.main --config examples/config-aggressive.yaml --paper
 ```
 
 ### Trading Settings (config/settings.yaml)
@@ -841,11 +862,32 @@ trading_api_requests_total{exchange, endpoint}
 
 ### Grafana Dashboards
 
-Access dashboards at `http://localhost:3000`:
-- **Trading Overview**: P&L, positions, orders
-- **Strategy Performance**: Per-strategy metrics
-- **System Health**: Latency, errors, connections
-- **Risk Dashboard**: Drawdown, exposure, VaR
+Pre-built dashboards are available in `grafana/dashboards/`:
+
+| Dashboard | File | Panels | Description |
+|-----------|------|--------|-------------|
+| **Trading Overview** | `trading-overview.json` | 15+ | PnL, win rate, trades, signals |
+| **Risk Management** | `risk-management.json` | 12+ | Drawdown, exposure, positions |
+| **Exchange Health** | `exchange-health.json` | 14+ | Latency, errors, rate limits |
+| **Strategy Performance** | `strategy-performance.json` | 16+ | Per-strategy metrics, ML, sentiment |
+
+**Setup:**
+
+```bash
+# Copy provisioning configs
+cp grafana/provisioning/*.yml /etc/grafana/provisioning/
+cp grafana/dashboards/*.json /var/lib/grafana/dashboards/
+
+# Or use Docker
+docker-compose up -d grafana
+```
+
+**Features:**
+- Auto-refresh (10-30 seconds)
+- Template variables for filtering (symbol, exchange, strategy)
+- Threshold alerts for drawdown, latency, errors
+- Dashboard linking for navigation
+- Prometheus datasource integration
 
 ### Dashboard Web UI
 
@@ -912,8 +954,123 @@ pytest tests/ -v --asyncio-mode=auto
 mypy src/
 
 # Linting
-flake8 src/
-black src/ --check
+ruff check src/
+ruff format src/ --check
+```
+
+---
+
+## CI/CD
+
+### GitHub Actions Workflows
+
+| Workflow | File | Trigger | Description |
+|----------|------|---------|-------------|
+| **CI** | `ci.yml` | Push, PR | Tests, linting, type checking |
+| **CD** | `cd.yml` | Tag push | Build, deploy to staging/prod |
+| **Security** | `security.yml` | Daily, PR | Vulnerability scanning |
+
+### CI Pipeline
+
+```yaml
+# Runs on every push and PR
+- Lint (Ruff)
+- Type check (MyPy)
+- Unit tests (pytest)
+- Integration tests
+- Coverage report
+- Build Docker image
+```
+
+### CD Pipeline
+
+```yaml
+# Runs on version tags (v*)
+- Build multi-arch Docker image (amd64, arm64)
+- Push to container registry
+- Deploy to staging (auto)
+- Deploy to production (manual approval)
+- Create GitHub Release
+- Slack notifications
+```
+
+### Security Scanning
+
+```yaml
+# Daily + on PRs
+- Dependency vulnerabilities (Safety, pip-audit)
+- Code security (Bandit, CodeQL)
+- Container scanning (Trivy)
+- Secret detection (Gitleaks, TruffleHog)
+```
+
+---
+
+## Development
+
+### Pre-commit Hooks
+
+```bash
+# Install pre-commit
+pip install pre-commit
+
+# Setup hooks
+pre-commit install
+
+# Run manually
+pre-commit run --all-files
+```
+
+**Configured Hooks:**
+
+| Hook | Description |
+|------|-------------|
+| `ruff` | Fast Python linter |
+| `ruff-format` | Code formatting |
+| `mypy` | Type checking |
+| `bandit` | Security linter |
+| `check-yaml` | YAML syntax validation |
+| `detect-secrets` | Prevent secret commits |
+| `trailing-whitespace` | Clean whitespace |
+
+### Code Quality
+
+```bash
+# Format code
+ruff format src/
+
+# Lint and auto-fix
+ruff check src/ --fix
+
+# Type check
+mypy src/
+
+# Security scan
+bandit -r src/
+
+# All checks
+pre-commit run --all-files
+```
+
+### Project Structure
+
+```
+crypto-scalper-bot/
+├── src/                    # Source code
+│   ├── core/              # Core trading engine
+│   ├── strategies/        # Trading strategies
+│   ├── integrations/      # Telegram, Slack, etc.
+│   └── utils/             # Utilities
+├── tests/                  # Test suite
+├── config/                 # Configuration files
+├── examples/               # Example configurations
+├── grafana/                # Grafana dashboards
+│   ├── dashboards/        # Dashboard JSON files
+│   └── provisioning/      # Auto-provisioning configs
+├── k8s/                    # Kubernetes manifests
+├── terraform/              # Infrastructure as Code
+├── .github/workflows/      # CI/CD pipelines
+└── docs/                   # Documentation
 ```
 
 ---

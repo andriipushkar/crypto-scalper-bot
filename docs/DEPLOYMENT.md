@@ -9,11 +9,13 @@ Complete guide for deploying the Crypto Scalper Bot in various environments.
 3. [Docker Deployment](#docker-deployment)
 4. [Kubernetes Deployment](#kubernetes-deployment)
 5. [AWS Infrastructure (Terraform)](#aws-infrastructure-terraform)
-6. [GitOps with ArgoCD](#gitops-with-argocd)
-7. [Monitoring Setup](#monitoring-setup)
-8. [Security Configuration](#security-configuration)
-9. [Backup & Recovery](#backup--recovery)
-10. [Troubleshooting](#troubleshooting)
+6. [CI/CD Pipelines](#cicd-pipelines)
+7. [GitOps with ArgoCD](#gitops-with-argocd)
+8. [Monitoring Setup](#monitoring-setup)
+9. [Grafana Dashboards](#grafana-dashboards)
+10. [Security Configuration](#security-configuration)
+11. [Backup & Recovery](#backup--recovery)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -480,6 +482,112 @@ aws secretsmanager create-secret \
 
 ---
 
+## CI/CD Pipelines
+
+### GitHub Actions Workflows
+
+Проект використовує GitHub Actions для автоматизації CI/CD:
+
+| Workflow | Файл | Тригер | Опис |
+|----------|------|--------|------|
+| CI | `.github/workflows/ci.yml` | Push, PR | Тести, лінтинг, type checking |
+| CD | `.github/workflows/cd.yml` | Tag push | Збірка, деплой staging/prod |
+| Security | `.github/workflows/security.yml` | Щоденно, PR | Сканування вразливостей |
+
+### CI Pipeline
+
+CI pipeline запускається при кожному push та PR:
+
+```yaml
+# Етапи CI pipeline
+- Лінтинг (Ruff)
+- Type checking (MyPy)
+- Unit тести (pytest)
+- Integration тести
+- Coverage report
+- Збірка Docker образу
+```
+
+**Налаштування secrets у GitHub:**
+
+```
+DOCKER_REGISTRY - Docker registry URL
+DOCKER_USERNAME - Docker username
+DOCKER_PASSWORD - Docker password
+SLACK_WEBHOOK_URL - Slack notifications (опціонально)
+```
+
+### CD Pipeline
+
+CD pipeline запускається при створенні тегу версії (v*):
+
+```bash
+# Створення релізу
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+**Етапи деплою:**
+
+1. **Staging (автоматично)**
+   - Збірка multi-arch Docker образу (amd64, arm64)
+   - Push до container registry
+   - Деплой на staging кластер
+   - Smoke tests
+
+2. **Production (manual approval)**
+   - Деплой на production кластер
+   - Health checks
+   - Slack notification
+   - GitHub Release
+
+### Security Scanning
+
+Сканування безпеки виконується щоденно та при PR:
+
+```yaml
+# Типи сканування
+- Dependency vulnerabilities (Safety, pip-audit)
+- Code security (Bandit, CodeQL)
+- Container scanning (Trivy)
+- Secret detection (Gitleaks, TruffleHog)
+```
+
+**Налаштування:**
+
+```bash
+# Локальний запуск security scan
+bandit -r src/ -f json -o bandit-report.json
+safety check --full-report
+trivy image crypto-scalper-bot:latest
+```
+
+### Pre-commit Hooks
+
+Локальна перевірка перед комітом:
+
+```bash
+# Встановлення
+pip install pre-commit
+pre-commit install
+
+# Ручний запуск
+pre-commit run --all-files
+```
+
+**Налаштовані хуки:**
+
+| Hook | Опис |
+|------|------|
+| `ruff` | Python linter |
+| `ruff-format` | Форматування коду |
+| `mypy` | Type checking |
+| `bandit` | Security linter |
+| `check-yaml` | Валідація YAML |
+| `detect-secrets` | Виявлення секретів |
+
+---
+
 ## GitOps with ArgoCD
 
 ### Step 1: Install ArgoCD
@@ -570,10 +678,159 @@ spec:
 kubectl port-forward svc/prometheus-grafana 3000:80 -n monitoring
 
 # Login: admin / prom-operator
-# Import dashboards from grafana/dashboards/
 ```
 
-### Step 4: Configure Alerts
+---
+
+## Grafana Dashboards
+
+### Доступні дашборди
+
+Готові дашборди знаходяться в `grafana/dashboards/`:
+
+| Дашборд | Файл | Панелі | Опис |
+|---------|------|--------|------|
+| **Trading Overview** | `trading-overview.json` | 15+ | PnL, win rate, trades, signals |
+| **Risk Management** | `risk-management.json` | 12+ | Drawdown, exposure, positions |
+| **Exchange Health** | `exchange-health.json` | 14+ | Latency, errors, rate limits |
+| **Strategy Performance** | `strategy-performance.json` | 16+ | Per-strategy metrics, ML, sentiment |
+
+### Автоматичне provisioning
+
+**Step 1: Скопіюйте конфігурацію provisioning:**
+
+```bash
+# Для Docker
+cp grafana/provisioning/*.yml /etc/grafana/provisioning/
+cp -r grafana/dashboards /var/lib/grafana/dashboards/
+
+# Для Kubernetes (ConfigMap)
+kubectl create configmap grafana-dashboards \
+  --from-file=grafana/dashboards/ \
+  -n monitoring
+```
+
+**Step 2: Налаштуйте datasources.yml:**
+
+```yaml
+# grafana/provisioning/datasources.yml
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+```
+
+**Step 3: Налаштуйте dashboards.yml:**
+
+```yaml
+# grafana/provisioning/dashboards.yml
+apiVersion: 1
+providers:
+  - name: 'Crypto Scalper Dashboards'
+    folder: 'Crypto Scalper'
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards
+```
+
+### Kubernetes Deployment
+
+```yaml
+# grafana-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  template:
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.2.0
+          volumeMounts:
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+            - name: provisioning
+              mountPath: /etc/grafana/provisioning
+      volumes:
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+        - name: provisioning
+          configMap:
+            name: grafana-provisioning
+```
+
+### Функціонал дашбордів
+
+**Trading Overview:**
+- Total PnL (USD) з кольоровою індикацією
+- Win Rate gauge
+- Trades за 24h
+- Current Drawdown
+- Open Positions
+- Cumulative PnL графік
+- Trade Activity (LONG/SHORT)
+- Signal Confidence
+
+**Risk Management:**
+- Drawdown gauge з порогами
+- Daily Loss Limit usage
+- Total Exposure gauge
+- Position table з real-time P&L
+- Drawdown History
+- Exit Events (stop-loss, take-profit)
+- Leverage tracking
+
+**Exchange Health:**
+- Connection status per exchange
+- API Latency (ms)
+- WebSocket Latency
+- Rate Limit usage (%)
+- API Errors by type
+- Order Execution Time (P50, P95)
+- Order Success Rate
+
+**Strategy Performance:**
+- Strategy summary table
+- Cumulative PnL by strategy
+- Win Rate comparison
+- Signal generation rate
+- ML Model Confidence
+- ML Prediction Time
+- Sentiment Score by source
+- Fear & Greed Index gauge
+
+### Template Variables
+
+Кожен дашборд підтримує фільтрацію:
+
+| Variable | Тип | Опис |
+|----------|-----|------|
+| `datasource` | Datasource | Prometheus instance |
+| `symbol` | Query | BTCUSDT, ETHUSDT, etc. |
+| `exchange` | Query | binance, bybit, okx |
+| `strategy` | Query | momentum, ml_signals, etc. |
+
+### Alerting
+
+Дашборди підтримують threshold alerts:
+
+```yaml
+# Приклади порогів
+- Drawdown > 10% → Warning
+- Drawdown > 15% → Critical
+- API Latency > 500ms → Warning
+- Order Success Rate < 95% → Critical
+```
+
+---
+
+### Configure Prometheus Alerts
 
 ```yaml
 # alerting-rules.yaml

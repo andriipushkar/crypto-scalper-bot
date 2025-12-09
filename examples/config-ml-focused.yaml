@@ -1,0 +1,171 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# ML-FOCUSED TRADING CONFIGURATION
+# ═══════════════════════════════════════════════════════════════════════════
+# This configuration prioritizes machine learning signals for trading
+# decisions, with traditional indicators as secondary confirmation.
+#
+# Prerequisites:
+# - Trained ML models (run scripts/train_model.py first)
+# - Historical data for feature generation
+# - Optional: Sentiment API keys
+# ═══════════════════════════════════════════════════════════════════════════
+
+trading:
+  symbols:
+    - BTCUSDT
+    - ETHUSDT
+
+  leverage: 10
+
+  paper_trading: true
+
+  default_exchange: binance
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ML STRATEGY CONFIGURATION
+# ═══════════════════════════════════════════════════════════════════════════
+strategies:
+  ml_signals:
+    enabled: true
+
+    # Model configuration
+    model:
+      type: ensemble                 # ensemble, random_forest, lstm
+      path: models/ensemble_model.pkl
+
+      # Individual model weights (for ensemble)
+      weights:
+        random_forest: 0.4
+        gradient_boost: 0.3
+        lstm: 0.3
+
+    # Prediction settings
+    prediction:
+      confidence_threshold: 0.70     # Minimum confidence to trade
+      lookback_periods: 50           # Candles for feature calculation
+      prediction_horizon: 5          # Predict 5 candles ahead
+
+    # Feature engineering
+    features:
+      technical:
+        - rsi_14
+        - rsi_7
+        - macd
+        - macd_signal
+        - macd_hist
+        - bb_upper
+        - bb_middle
+        - bb_lower
+        - bb_width
+        - atr_14
+        - adx_14
+        - cci_20
+        - williams_r
+        - stoch_k
+        - stoch_d
+
+      price:
+        - returns_1
+        - returns_5
+        - returns_10
+        - volatility_10
+        - volatility_20
+
+      volume:
+        - volume_ma_ratio
+        - volume_std
+        - obv
+        - vwap
+
+    # Model retraining
+    retraining:
+      enabled: true
+      frequency: weekly
+      min_samples: 10000
+
+  # Sentiment as additional signal
+  sentiment:
+    enabled: true
+    sources:
+      - twitter
+      - reddit
+      - fear_greed
+    weight: 0.15                    # 15% weight in final decision
+
+    # Sentiment thresholds
+    thresholds:
+      extreme_fear: 20
+      fear: 40
+      greed: 60
+      extreme_greed: 80
+
+  # Traditional indicators for confirmation only
+  momentum:
+    enabled: true
+    weight: 0.10                    # Low weight, just for confirmation
+    rsi_period: 14
+    overbought: 70
+    oversold: 30
+
+  # Disable other strategies
+  orderbook_imbalance:
+    enabled: false
+
+  volume_spike:
+    enabled: false
+
+  arbitrage:
+    enabled: false
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SIGNAL AGGREGATION
+# ═══════════════════════════════════════════════════════════════════════════
+signal_aggregation:
+  method: weighted_average
+
+  weights:
+    ml_signals: 0.75
+    sentiment: 0.15
+    momentum: 0.10
+
+  # Minimum agreement required
+  min_agreement: 0.6
+
+  # Conflict resolution
+  on_conflict: use_ml              # use_ml, skip, use_highest_confidence
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RISK MANAGEMENT
+# ═══════════════════════════════════════════════════════════════════════════
+risk:
+  max_position_size: 0.15
+  max_daily_loss: 150
+  max_drawdown: 0.12
+  risk_per_trade: 0.015
+  max_positions: 2
+
+  # Adjust position size based on ML confidence
+  confidence_scaling:
+    enabled: true
+    min_size_multiplier: 0.5       # At confidence_threshold
+    max_size_multiplier: 1.5       # At 95% confidence
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DATA COLLECTION FOR CONTINUOUS LEARNING
+# ═══════════════════════════════════════════════════════════════════════════
+data_collection:
+  enabled: true
+
+  # Store all predictions for model evaluation
+  store_predictions: true
+
+  # Store actual outcomes
+  store_outcomes: true
+
+  # Feature snapshots for retraining
+  store_features: true
+
+  # Storage location
+  storage:
+    type: database               # database, parquet, csv
+    retention_days: 365

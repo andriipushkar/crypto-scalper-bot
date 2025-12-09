@@ -1,0 +1,104 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# CONSERVATIVE TRADING CONFIGURATION
+# ═══════════════════════════════════════════════════════════════════════════
+# This configuration is designed for risk-averse traders who prioritize
+# capital preservation over aggressive returns.
+#
+# Recommended for:
+# - New traders learning the system
+# - Small accounts (<$5,000)
+# - Risk-averse investors
+# - Testing new strategies
+# ═══════════════════════════════════════════════════════════════════════════
+
+trading:
+  # Trade only the most liquid pairs
+  symbols:
+    - BTCUSDT
+
+  # Low leverage for safety
+  leverage: 3
+
+  # Always paper trade first!
+  paper_trading: true
+
+  # Single exchange to start
+  default_exchange: binance
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CONSERVATIVE RISK SETTINGS
+# ═══════════════════════════════════════════════════════════════════════════
+risk:
+  # Very small position sizes (5% max)
+  max_position_size: 0.05
+
+  # Strict daily loss limit
+  max_daily_loss: 50
+
+  # Tight drawdown control
+  max_drawdown: 0.05
+
+  # Minimal risk per trade (0.5%)
+  risk_per_trade: 0.005
+
+  # Only one position at a time
+  max_positions: 1
+
+  # Close stale positions after 30 minutes
+  position_timeout: 1800
+
+  # Wide stop-loss (less likely to get stopped out)
+  default_stop_loss_pct: 3.0
+
+  # Conservative take-profit
+  default_take_profit_pct: 2.0
+
+# ═══════════════════════════════════════════════════════════════════════════
+# STRATEGY SETTINGS - ONLY PROVEN STRATEGIES
+# ═══════════════════════════════════════════════════════════════════════════
+strategies:
+  # Simple, time-tested strategy
+  momentum:
+    enabled: true
+    rsi_period: 14
+    overbought: 75      # Higher threshold = fewer signals
+    oversold: 25        # Lower threshold = fewer signals
+
+  # Orderbook imbalance with high threshold
+  orderbook_imbalance:
+    enabled: true
+    threshold: 2.0      # Require stronger imbalance
+    levels: 10          # Look deeper into orderbook
+
+  # Disable experimental strategies
+  volume_spike:
+    enabled: false
+
+  ml_signals:
+    enabled: false
+
+  sentiment:
+    enabled: false
+
+  arbitrage:
+    enabled: false
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NOTIFICATIONS - STAY INFORMED
+# ═══════════════════════════════════════════════════════════════════════════
+notifications:
+  telegram:
+    enabled: true
+    trade_alerts: true
+    signal_alerts: true      # See all signals for learning
+    daily_summary: true
+    risk_warnings: true
+    error_alerts: true
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LOGGING - DETAILED FOR ANALYSIS
+# ═══════════════════════════════════════════════════════════════════════════
+logging:
+  level: DEBUG
+  save_all_signals: true
+  save_orderbook_snapshots: false
