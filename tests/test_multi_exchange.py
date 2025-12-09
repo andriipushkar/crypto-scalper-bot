@@ -291,9 +291,11 @@ class TestArbitrageDetection:
     @pytest.mark.asyncio
     async def test_detect_arbitrage(self, binance, bybit):
         """Test detecting arbitrage opportunity."""
-        # Set up price discrepancy
+        # Set up price discrepancy (need spread > fees)
+        # binance fee = 0.0004 (~$20), bybit fee = 0.0006 (~$30), total ~$50
+        # So spread must be > $50 to be profitable
         binance.set_price("BTCUSDT", Decimal("50000"), Decimal("49999"), Decimal("50001"))
-        bybit.set_price("BTCUSDT", Decimal("50020"), Decimal("50019"), Decimal("50021"))
+        bybit.set_price("BTCUSDT", Decimal("50080"), Decimal("50079"), Decimal("50081"))
 
         binance_ticker = await binance.get_ticker("BTCUSDT")
         bybit_ticker = await bybit.get_ticker("BTCUSDT")
@@ -311,8 +313,8 @@ class TestArbitrageDetection:
 
         net_profit = gross_profit - total_fees
 
-        assert gross_profit == Decimal("18")
-        assert net_profit > 0  # Profitable after fees
+        assert gross_profit == Decimal("78")  # 50079 - 50001
+        assert net_profit > 0  # Profitable after fees (~$78 - ~$50 = ~$28)
 
     @pytest.mark.asyncio
     async def test_no_arbitrage(self, binance, bybit):

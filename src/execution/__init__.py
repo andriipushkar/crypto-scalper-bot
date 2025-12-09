@@ -24,10 +24,21 @@ from src.execution.exchange_base import (
 )
 from src.execution.bybit_api import BybitFuturesAPI, BybitAPIError
 from src.execution.okx_api import OKXFuturesAPI, OKXAPIError
+from src.execution.kraken_api import KrakenFuturesAPI, KrakenAPIError
+from src.execution.kucoin_api import KuCoinFuturesAPI, KuCoinAPIError
+from src.execution.gateio_api import GateIOFuturesAPI, GateIOAPIError
 from src.execution.exchange_factory import (
     ExchangeFactory,
     get_exchange_factory,
     create_exchange,
+)
+from src.execution.fee_optimizer import (
+    FeeOptimizer,
+    ExchangeFeeStructure,
+    OrderExecutionType,
+    OrderExecutionPlan,
+    TradeAnalysis,
+    FeeLevel,
 )
 
 __all__ = [
@@ -50,6 +61,15 @@ __all__ = [
     # OKX
     "OKXFuturesAPI",
     "OKXAPIError",
+    # Kraken
+    "KrakenFuturesAPI",
+    "KrakenAPIError",
+    # KuCoin
+    "KuCoinFuturesAPI",
+    "KuCoinAPIError",
+    # Gate.io
+    "GateIOFuturesAPI",
+    "GateIOAPIError",
     # Paper Trading
     "PaperTradingEngine",
     "PaperTradingAPI",
@@ -60,4 +80,11 @@ __all__ = [
     "ExchangeFactory",
     "get_exchange_factory",
     "create_exchange",
+    # Fee Optimizer
+    "FeeOptimizer",
+    "ExchangeFeeStructure",
+    "OrderExecutionType",
+    "OrderExecutionPlan",
+    "TradeAnalysis",
+    "FeeLevel",
 ]

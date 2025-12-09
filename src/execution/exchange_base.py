@@ -22,6 +22,9 @@ class Exchange(Enum):
     BINANCE = "binance"
     BYBIT = "bybit"
     OKX = "okx"
+    KRAKEN = "kraken"
+    KUCOIN = "kucoin"
+    GATEIO = "gateio"
 
 
 @dataclass

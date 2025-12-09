@@ -23,6 +23,15 @@ try:
     HAS_TELEGRAM = True
 except ImportError:
     HAS_TELEGRAM = False
+    # Define placeholder types for type hints when telegram is not installed
+    Update = Any
+    Application = Any
+    CommandHandler = None
+
+    # Create a placeholder for ContextTypes with DEFAULT_TYPE attribute
+    class _ContextTypesPlaceholder:
+        DEFAULT_TYPE = Any
+    ContextTypes = _ContextTypesPlaceholder
 
 from loguru import logger
 

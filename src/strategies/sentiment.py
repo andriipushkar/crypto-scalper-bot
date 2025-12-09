@@ -5,7 +5,7 @@ Social media and news sentiment analysis for trading signals.
 """
 import asyncio
 import re
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from enum import Enum

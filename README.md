@@ -47,6 +47,30 @@ Production-ready automated scalping system for cryptocurrency futures trading wi
 - **Sentiment Analysis**: Twitter, Reddit, Fear & Greed Index integration
 - **Cross-Exchange Arbitrage**: Price discrepancy detection and execution
 - **Triangular Arbitrage**: Intra-exchange path-finding algorithm
+- **Smart DCA with AI/ML**: Intelligent dollar-cost averaging with machine learning
+- **News/Event Trading**: Economic calendar, token unlocks, sentiment analysis
+
+### Book-Based Strategies (from "Скальпинг: практическое руководство трейдера")
+- **Range Trading**: False breakout detection, boundary trading
+- **Session Trading**: Asia/Europe/US session-based trading, gap fill
+- **Trendline Breakout**: Automatic pivot detection, trendline construction
+- **Size Bounce/Breakout**: Wall reaction detection (bounce vs breakout)
+- **Bid/Ask Flip Detection**: Large order manipulation detection
+- **Impulse Scalping**: BTC/ETH correlation for altcoin trading
+- **Order Flow Velocity**: Trade acceleration and momentum analysis
+- **Fee Optimizer**: Maker/Taker fee optimization for scalping
+
+### Signal Provider
+- **Multi-tier Subscriptions**: FREE, BASIC, PREMIUM, VIP levels
+- **Delayed Delivery**: Configurable signal delays per tier
+- **Multi-channel Distribution**: Telegram, Email, Webhook, API
+- **Performance Tracking**: Win rate, profit factor, Sharpe ratio
+
+### Analytics & Alerts
+- **Liquidation Heatmap**: Liquidation level analysis and clustering
+- **Cascade Detection**: Multi-level liquidation cascade risk assessment
+- **Advanced Alerts**: Price, volume, whale, on-chain, technical indicators
+- **Multi-channel Notifications**: Telegram, Discord, Webhook, Email
 
 ### Risk Management
 - **Position Sizing**: Kelly criterion and fixed-risk models
@@ -1059,6 +1083,11 @@ crypto-scalper-bot/
 ├── src/                    # Source code
 │   ├── core/              # Core trading engine
 │   ├── strategies/        # Trading strategies
+│   ├── strategy/          # Advanced strategies (Smart DCA)
+│   ├── signals/           # Signal provider system
+│   ├── analytics/         # Analytics (Liquidation Heatmap)
+│   ├── trading/           # Trading modules (News/Event)
+│   ├── alerts/            # Advanced alert system
 │   ├── integrations/      # Telegram, Slack, etc.
 │   └── utils/             # Utilities
 ├── tests/                  # Test suite
@@ -1162,6 +1191,23 @@ crypto-scalper-bot/
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## Book-Based Strategies Documentation
+
+For detailed documentation on strategies implemented from the book "Скальпинг: практическое руководство трейдера" (Scalping: A Practical Guide for Traders), see:
+
+- **[docs/BOOK_STRATEGIES_UK.md](docs/BOOK_STRATEGIES_UK.md)** - Full documentation in Ukrainian
+
+These strategies include professional scalping techniques adapted for the 24/7 crypto market:
+- Range Trading with false breakout detection
+- Session-based trading (adapted from "Morning Return")
+- Trendline breakout with automatic pivot detection
+- Size Bounce/Breakout wall trading
+- Bid/Ask Flip manipulation detection
+- Order Flow Velocity analysis
+- Maker/Taker fee optimization
 
 ---
 

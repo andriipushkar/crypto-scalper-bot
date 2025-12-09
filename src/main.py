@@ -41,7 +41,14 @@ from src.utils.logger import setup_logger
 from src.utils.performance import setup_uvloop, optimize_process
 from src.utils.security import SecretFilter
 from src.core.engine import TradingEngine
-from src.strategy import OrderBookImbalanceStrategy, VolumeSpikeStrategy
+from src.strategy import (
+    OrderBookImbalanceStrategy,
+    VolumeSpikeStrategy,
+    ImpulseScalpingStrategy,
+    AdvancedOrderBookStrategy,
+    HybridScalpingStrategy,
+)
+from src.analytics import PrintTapeAnalyzer, ClusterAnalyzer
 from src.risk import RiskManager
 from src.execution import BinanceFuturesAPI, OrderExecutor
 from src.data.websocket import create_websocket_from_config
@@ -284,6 +291,7 @@ class ScalperBot:
         # Initialize strategies
         strategies = []
 
+        # Basic strategies
         if strategies_config.get("orderbook_imbalance", {}).get("enabled", True):
             strategies.append(OrderBookImbalanceStrategy(
                 strategies_config.get("orderbook_imbalance", {})
@@ -293,6 +301,63 @@ class ScalperBot:
             strategies.append(VolumeSpikeStrategy(
                 strategies_config.get("volume_spike", {})
             ))
+
+        # Advanced scalping strategies
+        # Check if hybrid scalping is enabled - it combines all advanced strategies
+        if strategies_config.get("hybrid_scalping", {}).get("enabled", False):
+            # Initialize analyzers for hybrid strategy
+            print_tape_analyzer = None
+            cluster_analyzer = None
+            impulse_strategy = None
+            advanced_orderbook = None
+
+            if strategies_config.get("print_tape", {}).get("enabled", True):
+                print_tape_analyzer = PrintTapeAnalyzer(
+                    strategies_config.get("print_tape", {})
+                )
+                logger.info("Initialized PrintTapeAnalyzer")
+
+            if strategies_config.get("cluster_analysis", {}).get("enabled", True):
+                cluster_analyzer = ClusterAnalyzer(
+                    strategies_config.get("cluster_analysis", {})
+                )
+                logger.info("Initialized ClusterAnalyzer")
+
+            if strategies_config.get("impulse_scalping", {}).get("enabled", False):
+                impulse_strategy = ImpulseScalpingStrategy(
+                    strategies_config.get("impulse_scalping", {})
+                )
+                logger.info("Initialized ImpulseScalpingStrategy")
+
+            if strategies_config.get("advanced_orderbook", {}).get("enabled", True):
+                advanced_orderbook = AdvancedOrderBookStrategy(
+                    strategies_config.get("advanced_orderbook", {})
+                )
+                logger.info("Initialized AdvancedOrderBookStrategy")
+
+            # Create hybrid strategy combining all enabled components
+            hybrid_config = strategies_config.get("hybrid_scalping", {})
+            hybrid_strategy = HybridScalpingStrategy(
+                config=hybrid_config,
+                orderbook_strategy=advanced_orderbook,
+                impulse_strategy=impulse_strategy,
+                tape_analyzer=print_tape_analyzer,
+                cluster_analyzer=cluster_analyzer,
+            )
+            strategies.append(hybrid_strategy)
+            logger.info("Initialized HybridScalpingStrategy with components")
+
+        else:
+            # Individual advanced strategies (if hybrid is disabled)
+            if strategies_config.get("advanced_orderbook", {}).get("enabled", False):
+                strategies.append(AdvancedOrderBookStrategy(
+                    strategies_config.get("advanced_orderbook", {})
+                ))
+
+            if strategies_config.get("impulse_scalping", {}).get("enabled", False):
+                strategies.append(ImpulseScalpingStrategy(
+                    strategies_config.get("impulse_scalping", {})
+                ))
 
         if not strategies:
             logger.error("No strategies enabled!")

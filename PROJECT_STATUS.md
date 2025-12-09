@@ -1,6 +1,6 @@
 # Crypto Scalper Bot - Статус проекту
 
-**Останнє оновлення:** 2025-12-09
+**Останнє оновлення:** 2025-12-09 (Book-based strategies added!)
 
 ---
 
@@ -11,7 +11,7 @@
 | Компонент | Статус | Опис |
 |-----------|--------|------|
 | Core Trading Engine | Done | Основний торговий движок |
-| Multi-Exchange Support | Done | Binance, Bybit, OKX |
+| Multi-Exchange Support | Done | Binance, Bybit, OKX, Kraken, KuCoin, Gate.io |
 | Risk Management | Done | Stop-loss, take-profit, drawdown control |
 | Position Management | Done | Відкриття/закриття позицій |
 
@@ -25,6 +25,23 @@
 | Sentiment Analysis | `src/strategies/sentiment.py` | Done |
 | Arbitrage | `src/strategies/arbitrage.py` | Done |
 | ML Strategy (LSTM) | `src/strategy/ml_strategy.py` | Done |
+| Grid Trading | `src/strategy/grid_trading.py` | Done |
+| Mean Reversion | `src/strategy/mean_reversion.py` | Done |
+| DCA (Dollar Cost Averaging) | `src/strategy/dca_strategy.py` | Done |
+
+### Book-Based Strategies (100%) - з книги "Скальпинг: практическое руководство трейдера"
+
+| Стратегія | Файл | Статус |
+|-----------|------|--------|
+| Range Trading | `src/strategy/range_trading.py` | Done |
+| Session Trading | `src/strategy/session_trading.py` | Done |
+| Trendline Breakout | `src/strategy/trendline_breakout.py` | Done |
+| Advanced Orderbook (Size Bounce/Breakout) | `src/strategy/advanced_orderbook.py` | Done |
+| Advanced Orderbook (Bid/Ask Flip) | `src/strategy/advanced_orderbook.py` | Done |
+| Impulse Scalping (BTC/ETH Leaders) | `src/strategy/impulse_scalping.py` | Done |
+| Hybrid Scalping | `src/strategy/hybrid_scalping.py` | Done |
+| Order Flow Velocity | `src/analytics/print_tape.py` | Done |
+| Fee Optimizer | `src/execution/fee_optimizer.py` | Done |
 
 ### Інтеграції (100%)
 
@@ -51,6 +68,11 @@
 | API Reference | `docs/API.md` | Done |
 | Deployment Guide | `docs/DEPLOYMENT.md` | Done |
 | User Guide | `docs/USER_GUIDE.md` | Done |
+| Book Strategies (UK) | `docs/BOOK_STRATEGIES_UK.md` | Done |
+| Quick Start (UK) | `docs/QUICKSTART_UK.md` | Done |
+| User Guide (UK) | `docs/USER_GUIDE_UK.md` | Done |
+| Configuration (UK) | `docs/CONFIGURATION_UK.md` | Done |
+| API (UK) | `docs/API_UK.md` | Done |
 
 ### CI/CD & DevOps (100%)
 
@@ -103,6 +125,11 @@
 | `tests/test_paper_trading.py` | Paper trading |
 | `tests/test_multi_account.py` | Multi-account |
 | `tests/test_integrations.py` | Telegram, Slack |
+| `tests/test_new_strategies.py` | Grid Trading, Mean Reversion |
+| `tests/test_new_exchanges.py` | Kraken, KuCoin APIs |
+| `tests/test_dca_gateio.py` | DCA Strategy, Gate.io API |
+| `tests/test_walk_forward.py` | Walk-forward optimization |
+| `tests/test_book_strategies.py` | Book-based strategies (Range, Session, Trendline, etc.) |
 | `tests/e2e/` | End-to-end tests |
 
 ---
@@ -114,7 +141,31 @@ crypto-scalper-bot/
 ├── src/
 │   ├── core/              # Core trading engine
 │   ├── strategy/          # Trading strategies
+│   │   ├── base.py              # Base strategy class
+│   │   ├── orderbook_imbalance.py
+│   │   ├── volume_spike.py
+│   │   ├── grid_trading.py
+│   │   ├── mean_reversion.py
+│   │   ├── dca_strategy.py
+│   │   ├── range_trading.py     # Book-based: Range trading
+│   │   ├── session_trading.py   # Book-based: Session trading
+│   │   ├── trendline_breakout.py # Book-based: Trendline breakout
+│   │   ├── advanced_orderbook.py # Book-based: Size bounce/breakout, Bid/Ask flip
+│   │   ├── impulse_scalping.py  # Book-based: BTC/ETH correlation
+│   │   └── hybrid_scalping.py   # Book-based: Hybrid signals
 │   ├── strategies/        # Additional strategies (ML, sentiment, arbitrage)
+│   ├── execution/         # Exchange APIs & execution
+│   │   ├── binance_api.py
+│   │   ├── bybit_api.py
+│   │   ├── okx_api.py
+│   │   ├── kraken_api.py
+│   │   ├── kucoin_api.py
+│   │   ├── gateio_api.py
+│   │   └── fee_optimizer.py     # Book-based: Maker/Taker optimization
+│   ├── analytics/         # Analytics modules
+│   │   ├── print_tape.py        # Book-based: Order flow velocity
+│   │   ├── liquidation_heatmap.py
+│   │   └── cluster_analysis.py
 │   ├── trading/           # Paper trading, multi-account
 │   ├── backtesting/       # Backtest engine
 │   ├── integrations/      # Telegram, Slack, TradingView
@@ -168,21 +219,21 @@ crypto-scalper-bot/
    - Prometheus + Grafana
    - Імпортувати дашборди
 
-### Low Priority
+### Low Priority (All Completed!)
 
 7. **Додаткові стратегії**
-   - Mean Reversion
-   - Grid Trading
-   - DCA (Dollar Cost Averaging)
+   - ~~Mean Reversion~~ Done
+   - ~~Grid Trading~~ Done
+   - ~~DCA (Dollar Cost Averaging)~~ Done
 
 8. **Оптимізація**
-   - Walk-forward optimization
-   - Hyperparameter tuning
+   - ~~Walk-forward optimization~~ Done
+   - ~~Hyperparameter tuning~~ Done (Optuna integration)
 
 9. **Додаткові біржі**
-   - Kraken
-   - KuCoin
-   - Gate.io
+   - ~~Kraken~~ Done
+   - ~~KuCoin~~ Done
+   - ~~Gate.io~~ Done
 
 ---
 

@@ -182,9 +182,10 @@ class RiskManager:
                 remaining = self.config.cooldown_after_loss - elapsed
                 return False, f"Loss cooldown ({remaining:.0f}s remaining)"
 
-        # Check available capital
-        if self.available_capital < self.config.total_capital * Decimal("0.05"):
-            return False, "Insufficient available capital"
+        # Check available capital (only for entry signals)
+        if signal and signal.is_entry:
+            if self.available_capital < self.config.total_capital * Decimal("0.05"):
+                return False, "Insufficient available capital"
 
         return True, "OK"
 

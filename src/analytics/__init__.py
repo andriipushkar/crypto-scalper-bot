@@ -25,6 +25,19 @@ from src.analytics.sentiment import (
     get_fear_greed_index,
     sentiment_to_signal_modifier,
 )
+from src.analytics.print_tape import (
+    PrintTapeAnalyzer,
+    TapeEntry,
+    OrderFlowMetrics,
+    TapeSignal,
+)
+from src.analytics.cluster_analysis import (
+    ClusterAnalyzer,
+    VolumeCluster,
+    PriceLevel,
+    VolumeProfile,
+    ClusterType,
+)
 
 __all__ = [
     # Trade Journal
@@ -49,4 +62,15 @@ __all__ = [
     "get_market_sentiment",
     "get_fear_greed_index",
     "sentiment_to_signal_modifier",
+    # Print Tape (Scalping)
+    "PrintTapeAnalyzer",
+    "TapeEntry",
+    "OrderFlowMetrics",
+    "TapeSignal",
+    # Cluster Analysis (Scalping)
+    "ClusterAnalyzer",
+    "VolumeCluster",
+    "PriceLevel",
+    "VolumeProfile",
+    "ClusterType",
 ]

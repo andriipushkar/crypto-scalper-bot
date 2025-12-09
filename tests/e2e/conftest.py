@@ -168,7 +168,7 @@ async def mock_redis():
 async def test_client(mock_exchange, mock_database, mock_redis):
     """Create test client for API E2E tests."""
     try:
-        from src.dashboard.app import create_app
+        from src.web.app import create_app
 
         app = create_app()
 

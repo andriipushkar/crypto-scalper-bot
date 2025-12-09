@@ -17,6 +17,9 @@ from src.execution.exchange_base import (
 from src.execution.binance_api import BinanceFuturesAPI
 from src.execution.bybit_api import BybitFuturesAPI
 from src.execution.okx_api import OKXFuturesAPI
+from src.execution.kraken_api import KrakenFuturesAPI
+from src.execution.kucoin_api import KuCoinFuturesAPI
+from src.execution.gateio_api import GateIOFuturesAPI
 from src.execution.paper_trading import PaperTradingEngine, PaperTradingAPI
 
 
@@ -25,6 +28,9 @@ EXCHANGE_CLASSES: Dict[Exchange, Type[BaseExchangeAPI]] = {
     Exchange.BINANCE: BinanceFuturesAPI,
     Exchange.BYBIT: BybitFuturesAPI,
     Exchange.OKX: OKXFuturesAPI,
+    Exchange.KRAKEN: KrakenFuturesAPI,
+    Exchange.KUCOIN: KuCoinFuturesAPI,
+    Exchange.GATEIO: GateIOFuturesAPI,
 }
 
 
@@ -187,7 +193,7 @@ def create_exchange(
     except ValueError:
         raise ValueError(
             f"Unknown exchange: {exchange}. "
-            f"Supported: binance, bybit, okx, paper"
+            f"Supported: binance, bybit, okx, kraken, kucoin, gateio, paper"
         )
 
     return factory.create(exchange_type, credentials, testnet)

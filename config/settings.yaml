@@ -90,6 +90,94 @@ strategies:
     # Weight in combined signal
     signal_weight: 0.3
 
+  # ============================================================================
+  # Advanced Scalping Strategies (Просунуті стратегії скальпінгу)
+  # ============================================================================
+
+  impulse_scalping:
+    enabled: false  # Вимкнено за замовчуванням - потребує додаткових API
+    # Лідери ринку для відстеження імпульсів
+    leader_assets:
+      - SPX    # S&P 500
+      - DXY    # US Dollar Index
+      - GOLD   # Gold (XAU)
+      - VIX    # Volatility Index
+    # Мінімальний рух лідера для сигналу (%)
+    min_leader_move: 0.3
+    # Час життя імпульсу (секунди)
+    impulse_ttl: 300
+    # Затримка кореляції crypto до лідерів (секунди)
+    correlation_lag: 60
+    # Вага в гібридній стратегії
+    weight: 0.25
+
+  advanced_orderbook:
+    enabled: true
+    # Виявлення стін в стакані
+    wall_detection:
+      # Мінімальний розмір стіни (в рази більше середнього)
+      min_wall_multiplier: 5.0
+      # Мінімальна вартість стіни в USD
+      min_wall_value_usd: 50000
+    # Фронтраннінг (торгівля перед великими стінами)
+    frontrunning:
+      enabled: true
+      # Відстань від стіни для входу (%)
+      entry_distance: 0.1
+      # Мінімальний розмір стіни для фронтраннінгу (USD)
+      min_wall_size_usd: 100000
+    # Виявлення спуфінгу
+    spoofing_detection:
+      enabled: true
+      # Кількість появ/зникнень для детекції спуфу
+      appearance_threshold: 3
+      # Часове вікно для детекції (секунди)
+      time_window: 30
+    # Виявлення айсбергів
+    iceberg_detection:
+      enabled: true
+      # Мінімальний розмір для відстеження
+      min_hidden_volume: 10000
+    # Вага в гібридній стратегії
+    weight: 0.35
+
+  print_tape:
+    enabled: true
+    # Поріг для визначення whale trade (USD)
+    whale_threshold_usd: 50000
+    # Вікно для CVD аналізу (секунди)
+    cvd_window: 60
+    # Поріг дельти для сигналу (%)
+    delta_threshold: 60
+    # Мінімальна кількість whale trades для сигналу
+    min_whale_trades: 3
+    # Вага в гібридній стратегії
+    weight: 0.25
+
+  cluster_analysis:
+    enabled: true
+    # Розмір кластера в тіках ціни
+    cluster_size_ticks: 10
+    # Value Area відсоток (70% = стандарт)
+    value_area_percent: 70
+    # Поріг імбалансу bid/ask (%)
+    imbalance_threshold: 65
+    # Мінімальний об'єм для значущого рівня (USD)
+    min_level_volume_usd: 10000
+    # Вага в гібридній стратегії
+    weight: 0.15
+
+  hybrid_scalping:
+    enabled: true
+    # Мінімальна кількість підтверджень від різних джерел
+    min_confirmations: 2
+    # Мінімальна сукупна вага для сигналу
+    min_combined_weight: 0.5
+    # Таймфрейм для аналізу тренду (секунди)
+    trend_timeframe: 3600  # 1 година
+    # Кулдаун між сигналами (секунди)
+    signal_cooldown: 30
+
 data:
   # Order book depth to maintain locally
   orderbook_depth: 20

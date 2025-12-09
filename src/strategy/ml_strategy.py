@@ -346,7 +346,7 @@ class MLStrategy(BaseStrategy):
 
         logger.info(f"ML Strategy initialized (model: {self.model_type}, device: {self.device})")
 
-    def _load_or_create_model(self) -> nn.Module:
+    def _load_or_create_model(self) -> "nn.Module":
         """Load existing model or create new one."""
         model_path = Path(self.model_path)
 
@@ -519,7 +519,7 @@ def train_model(
     batch_size: int = 32,
     learning_rate: float = 0.001,
     validation_split: float = 0.2,
-) -> nn.Module:
+) -> "nn.Module":
     """
     Train the ML model.
 

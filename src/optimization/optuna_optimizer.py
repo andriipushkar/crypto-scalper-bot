@@ -32,6 +32,9 @@ from src.backtest import BacktestEngine, BacktestConfig, HistoricalDataLoader
 from src.strategy.base import BaseStrategy
 from src.strategy.orderbook_imbalance import OrderBookImbalanceStrategy
 from src.strategy.volume_spike import VolumeSpikeStrategy
+from src.strategy.grid_trading import GridTradingStrategy
+from src.strategy.mean_reversion import MeanReversionStrategy
+from src.strategy.dca_strategy import DCAStrategy
 
 
 # =============================================================================
@@ -107,10 +110,70 @@ def get_combined_strategy_params(trial: 'Trial') -> Dict[str, Any]:
     }
 
 
+def get_grid_trading_params(trial: 'Trial') -> Dict[str, Any]:
+    """Define parameter space for GridTradingStrategy."""
+    return {
+        "enabled": True,
+        "auto_range": True,
+        "range_percent": trial.suggest_float("range_percent", 0.02, 0.10),
+        "grid_levels": trial.suggest_int("grid_levels", 5, 20),
+        "quantity_per_grid": trial.suggest_float("quantity_per_grid", 0.001, 0.01),
+        "direction": trial.suggest_categorical("direction", ["neutral", "long", "short"]),
+        "take_profit_grids": trial.suggest_int("take_profit_grids", 1, 3),
+        "trailing_up": trial.suggest_categorical("trailing_up", [True, False]),
+        "trailing_down": trial.suggest_categorical("trailing_down", [True, False]),
+        "signal_cooldown": trial.suggest_float("signal_cooldown", 5.0, 60.0),
+        "min_strength": trial.suggest_float("min_strength", 0.3, 0.7),
+    }
+
+
+def get_mean_reversion_params(trial: 'Trial') -> Dict[str, Any]:
+    """Define parameter space for MeanReversionStrategy."""
+    return {
+        "enabled": True,
+        "lookback_period": trial.suggest_int("lookback_period", 10, 50),
+        "std_dev_multiplier": trial.suggest_float("std_dev_multiplier", 1.5, 3.0),
+        "entry_z_score": trial.suggest_float("entry_z_score", 1.5, 3.0),
+        "exit_z_score": trial.suggest_float("exit_z_score", 0.2, 1.0),
+        "rsi_period": trial.suggest_int("rsi_period", 7, 21),
+        "rsi_oversold": trial.suggest_float("rsi_oversold", 20, 40),
+        "rsi_overbought": trial.suggest_float("rsi_overbought", 60, 80),
+        "use_rsi_confirmation": trial.suggest_categorical("use_rsi_confirmation", [True, False]),
+        "max_position_bars": trial.suggest_int("max_position_bars", 20, 100),
+        "signal_cooldown": trial.suggest_float("signal_cooldown", 5.0, 30.0),
+        "min_strength": trial.suggest_float("min_strength", 0.3, 0.7),
+    }
+
+
+def get_dca_params(trial: 'Trial') -> Dict[str, Any]:
+    """Define parameter space for DCAStrategy."""
+    return {
+        "enabled": True,
+        "mode": trial.suggest_categorical("mode", ["time_based", "price_based", "hybrid"]),
+        "direction": trial.suggest_categorical("direction", ["accumulate", "distribute"]),
+        "interval_minutes": trial.suggest_int("interval_minutes", 15, 240),
+        "dip_threshold": trial.suggest_float("dip_threshold", 0.01, 0.05),
+        "spike_threshold": trial.suggest_float("spike_threshold", 0.01, 0.05),
+        "base_order_size": trial.suggest_float("base_order_size", 0.001, 0.01),
+        "safety_order_size": trial.suggest_float("safety_order_size", 0.001, 0.02),
+        "max_safety_orders": trial.suggest_int("max_safety_orders", 1, 5),
+        "safety_order_step": trial.suggest_float("safety_order_step", 0.01, 0.05),
+        "safety_order_multiplier": trial.suggest_float("safety_order_multiplier", 1.0, 2.0),
+        "take_profit_percent": trial.suggest_float("take_profit_percent", 0.01, 0.05),
+        "trailing_take_profit": trial.suggest_categorical("trailing_take_profit", [True, False]),
+        "trailing_deviation": trial.suggest_float("trailing_deviation", 0.002, 0.01),
+        "signal_cooldown": trial.suggest_float("signal_cooldown", 60.0, 600.0),
+        "min_strength": trial.suggest_float("min_strength", 0.3, 0.7),
+    }
+
+
 STRATEGY_PARAM_FUNCTIONS = {
     "orderbook_imbalance": get_orderbook_imbalance_params,
     "volume_spike": get_volume_spike_params,
     "combined": get_combined_strategy_params,
+    "grid_trading": get_grid_trading_params,
+    "mean_reversion": get_mean_reversion_params,
+    "dca": get_dca_params,
 }
 
 
@@ -161,6 +224,12 @@ class StrategyOptimizer:
             return OrderBookImbalanceStrategy(params)
         elif self.strategy_name == "volume_spike":
             return VolumeSpikeStrategy(params)
+        elif self.strategy_name == "grid_trading":
+            return GridTradingStrategy(params)
+        elif self.strategy_name == "mean_reversion":
+            return MeanReversionStrategy(params)
+        elif self.strategy_name == "dca":
+            return DCAStrategy(params)
         elif self.strategy_name == "combined":
             from src.strategy.base import CompositeStrategy
             strategies = [

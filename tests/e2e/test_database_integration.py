@@ -205,11 +205,13 @@ class TestPerformanceMetrics:
     async def test_equity_curve_storage(self, mock_database):
         """Test storing equity curve data."""
         async with mock_database() as session:
+            # Equity grows over time, so older points (larger i) have less equity
             equity_points = [
-                {"timestamp": datetime.now() - timedelta(hours=i), "equity": Decimal(str(10000 + i * 10))}
+                {"timestamp": datetime.now() - timedelta(hours=i), "equity": Decimal(str(10230 - i * 10))}
                 for i in range(24)
             ]
             assert len(equity_points) == 24
+            # Most recent (i=0) has 10230, oldest (i=23) has 10000
             assert equity_points[0]["equity"] > equity_points[-1]["equity"]
 
 

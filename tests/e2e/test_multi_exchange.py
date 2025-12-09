@@ -265,8 +265,8 @@ class TestCrossExchangeArbitrage:
 
         mock_bybit.get_ticker = AsyncMock(return_value={
             "symbol": "BTCUSDT",
-            "bid": Decimal("50010.0"),  # Higher bid
-            "ask": Decimal("50011.0"),
+            "bid": Decimal("50120.0"),  # Higher bid - need spread > fees (~$100)
+            "ask": Decimal("50121.0"),
             "exchange": "bybit"
         })
 
@@ -283,7 +283,8 @@ class TestCrossExchangeArbitrage:
         net_profit = potential_profit - fees
         is_profitable = net_profit > 0
 
-        assert potential_profit == Decimal("9.0")
+        # spread = 50120 - 50001 = 119, fees ≈ 100.12, net ≈ 18.88
+        assert potential_profit == Decimal("119.0")
         assert is_profitable
 
     @pytest.mark.asyncio
@@ -410,7 +411,7 @@ class TestExchangeNormalization:
         }
 
         assert rounded["binance"] == Decimal("0.123")
-        assert rounded["bybit"] == Decimal("0.1235")
+        assert rounded["bybit"] == Decimal("0.1234")  # Python uses banker's rounding
         assert rounded["okx"] == Decimal("0.12")
 
 

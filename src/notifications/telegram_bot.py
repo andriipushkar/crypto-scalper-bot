@@ -140,7 +140,44 @@ class TelegramBotController:
             "cancel": self._cmd_cancel,
             "leverage": self._cmd_leverage,
             "lev": self._cmd_leverage,
+            # New trading commands
+            "buy": self._cmd_buy,
+            "sell": self._cmd_sell,
+            "long": self._cmd_buy,  # Alias
+            "short": self._cmd_sell,  # Alias
+            "sl": self._cmd_set_sl,
+            "tp": self._cmd_set_tp,
+            "sltp": self._cmd_set_sltp,
+            # Statistics commands
+            "stats": self._cmd_stats,
+            "daily": self._cmd_daily_stats,
+            "weekly": self._cmd_weekly_stats,
+            "monthly": self._cmd_monthly_stats,
+            # Alert commands
+            "alerts": self._cmd_alerts,
+            "alert": self._cmd_alerts,
+            # Strategy commands
+            "strategies": self._cmd_strategies,
+            "enable": self._cmd_enable_strategy,
+            "disable": self._cmd_disable_strategy,
+            # Exchange commands
+            "exchange": self._cmd_exchange,
+            # Quick actions
+            "closeall": self._cmd_close_all,
+            "panic": self._cmd_panic,  # Emergency stop all
         }
+
+        # Callbacks for new functionality
+        self._place_order: Callable[[str, str, float, Optional[float]], Awaitable[Dict]] = None
+        self._set_sl_tp: Callable[[str, float, float], Awaitable[bool]] = None
+        self._get_daily_stats: Callable[[], Dict[str, Any]] = None
+        self._get_strategies: Callable[[], Dict[str, Any]] = None
+        self._toggle_strategy: Callable[[str, bool], Awaitable[bool]] = None
+        self._close_all_positions: Callable[[], Awaitable[int]] = None
+
+        # Alert settings
+        self._alerts_enabled = True
+        self._alert_chat_ids: List[int] = []
 
     def _parse_user_ids(self, user_str: str) -> List[int]:
         """Parse comma-separated user IDs."""
@@ -628,6 +665,641 @@ Use /status to check bot status.
         if success:
             return f"✅ Leverage for {symbol} set to {leverage}x."
         return f"❌ Failed to set leverage for {symbol}."
+
+    # =========================================================================
+    # New Trading Commands
+    # =========================================================================
+
+    async def _cmd_buy(self, ctx: Dict) -> str:
+        """
+        Handle /buy command.
+        Usage: /buy BTCUSDT 0.001 [price]
+        """
+        if not ctx["is_admin"]:
+            return "⛔ Admin permission required."
+
+        if len(ctx["args"]) < 2:
+            return """
+<b>Usage:</b> /buy SYMBOL QUANTITY [PRICE]
+
+<b>Examples:</b>
+/buy BTCUSDT 0.001 - Market order
+/buy BTCUSDT 0.001 50000 - Limit order @ $50,000
+/long BTCUSDT 0.001 - Alias for /buy
+"""
+
+        symbol = ctx["args"][0].upper()
+        try:
+            quantity = float(ctx["args"][1])
+        except ValueError:
+            return "❌ Invalid quantity."
+
+        price = None
+        if len(ctx["args"]) >= 3:
+            try:
+                price = float(ctx["args"][2])
+            except ValueError:
+                return "❌ Invalid price."
+
+        if self._place_order:
+            result = await self._place_order(symbol, "BUY", quantity, price)
+            if result.get("success", True):
+                order_type = "Limit" if price else "Market"
+                price_str = f" @ ${price:,.2f}" if price else ""
+                return f"""
+✅ <b>Order Placed</b>
+
+📈 {order_type} BUY
+Symbol: {symbol}
+Quantity: {quantity}
+{f'Price: ${price:,.2f}' if price else 'Type: Market'}
+"""
+            return f"❌ Order failed: {result.get('error', 'Unknown error')}"
+
+        return "❌ Order placement not available."
+
+    async def _cmd_sell(self, ctx: Dict) -> str:
+        """
+        Handle /sell command.
+        Usage: /sell BTCUSDT 0.001 [price]
+        """
+        if not ctx["is_admin"]:
+            return "⛔ Admin permission required."
+
+        if len(ctx["args"]) < 2:
+            return """
+<b>Usage:</b> /sell SYMBOL QUANTITY [PRICE]
+
+<b>Examples:</b>
+/sell BTCUSDT 0.001 - Market order
+/sell BTCUSDT 0.001 51000 - Limit order @ $51,000
+/short BTCUSDT 0.001 - Alias for /sell
+"""
+
+        symbol = ctx["args"][0].upper()
+        try:
+            quantity = float(ctx["args"][1])
+        except ValueError:
+            return "❌ Invalid quantity."
+
+        price = None
+        if len(ctx["args"]) >= 3:
+            try:
+                price = float(ctx["args"][2])
+            except ValueError:
+                return "❌ Invalid price."
+
+        if self._place_order:
+            result = await self._place_order(symbol, "SELL", quantity, price)
+            if result.get("success", True):
+                order_type = "Limit" if price else "Market"
+                return f"""
+✅ <b>Order Placed</b>
+
+📉 {order_type} SELL
+Symbol: {symbol}
+Quantity: {quantity}
+{f'Price: ${price:,.2f}' if price else 'Type: Market'}
+"""
+            return f"❌ Order failed: {result.get('error', 'Unknown error')}"
+
+        return "❌ Order placement not available."
+
+    async def _cmd_set_sl(self, ctx: Dict) -> str:
+        """
+        Handle /sl command.
+        Usage: /sl BTCUSDT 49000
+        """
+        if not ctx["is_admin"]:
+            return "⛔ Admin permission required."
+
+        if len(ctx["args"]) < 2:
+            return "Usage: /sl BTCUSDT 49000"
+
+        symbol = ctx["args"][0].upper()
+        try:
+            sl_price = float(ctx["args"][1])
+        except ValueError:
+            return "❌ Invalid price."
+
+        if self._set_sl_tp:
+            success = await self._set_sl_tp(symbol, sl_price, None)
+            if success:
+                return f"✅ Stop-Loss for {symbol} set to ${sl_price:,.2f}"
+            return f"❌ Failed to set SL for {symbol}"
+
+        return "❌ SL/TP configuration not available."
+
+    async def _cmd_set_tp(self, ctx: Dict) -> str:
+        """
+        Handle /tp command.
+        Usage: /tp BTCUSDT 51000
+        """
+        if not ctx["is_admin"]:
+            return "⛔ Admin permission required."
+
+        if len(ctx["args"]) < 2:
+            return "Usage: /tp BTCUSDT 51000"
+
+        symbol = ctx["args"][0].upper()
+        try:
+            tp_price = float(ctx["args"][1])
+        except ValueError:
+            return "❌ Invalid price."
+
+        if self._set_sl_tp:
+            success = await self._set_sl_tp(symbol, None, tp_price)
+            if success:
+                return f"✅ Take-Profit for {symbol} set to ${tp_price:,.2f}"
+            return f"❌ Failed to set TP for {symbol}"
+
+        return "❌ SL/TP configuration not available."
+
+    async def _cmd_set_sltp(self, ctx: Dict) -> str:
+        """
+        Handle /sltp command.
+        Usage: /sltp BTCUSDT 49000 51000
+        """
+        if not ctx["is_admin"]:
+            return "⛔ Admin permission required."
+
+        if len(ctx["args"]) < 3:
+            return "Usage: /sltp BTCUSDT 49000 51000"
+
+        symbol = ctx["args"][0].upper()
+        try:
+            sl_price = float(ctx["args"][1])
+            tp_price = float(ctx["args"][2])
+        except ValueError:
+            return "❌ Invalid price."
+
+        if self._set_sl_tp:
+            success = await self._set_sl_tp(symbol, sl_price, tp_price)
+            if success:
+                return f"""
+✅ <b>SL/TP Set</b>
+
+Symbol: {symbol}
+🛑 Stop-Loss: ${sl_price:,.2f}
+🎯 Take-Profit: ${tp_price:,.2f}
+"""
+            return f"❌ Failed to set SL/TP for {symbol}"
+
+        return "❌ SL/TP configuration not available."
+
+    # =========================================================================
+    # Statistics Commands
+    # =========================================================================
+
+    async def _cmd_stats(self, ctx: Dict) -> str:
+        """Handle /stats command - detailed statistics."""
+        pnl = self._get_pnl()
+
+        total = pnl.get("total_pnl", 0)
+        daily = pnl.get("daily_pnl", 0)
+        trades = pnl.get("trades", 0)
+        wins = pnl.get("winning_trades", 0)
+        losses = pnl.get("losing_trades", 0)
+        win_rate = pnl.get("win_rate", 0)
+        profit_factor = pnl.get("profit_factor", 0)
+        sharpe = pnl.get("sharpe_ratio", 0)
+        max_dd = pnl.get("max_drawdown", 0)
+
+        total_emoji = "📈" if total > 0 else "📉" if total < 0 else "➡️"
+        daily_emoji = "📈" if daily > 0 else "📉" if daily < 0 else "➡️"
+
+        return f"""
+<b>📊 Trading Statistics</b>
+
+<b>P&L Summary</b>
+{total_emoji} Total P&L: <code>${total:+,.2f}</code>
+{daily_emoji} Daily P&L: <code>${daily:+,.2f}</code>
+
+<b>Trade Performance</b>
+📊 Total Trades: {trades}
+✅ Winning: {wins}
+❌ Losing: {losses}
+🎯 Win Rate: {win_rate:.1f}%
+
+<b>Risk Metrics</b>
+📈 Profit Factor: {profit_factor:.2f}
+📉 Max Drawdown: {max_dd:.2f}%
+📊 Sharpe Ratio: {sharpe:.2f}
+"""
+
+    async def _cmd_daily_stats(self, ctx: Dict) -> str:
+        """Handle /daily command."""
+        if self._get_daily_stats:
+            stats = self._get_daily_stats()
+            return f"""
+<b>📅 Daily Statistics</b>
+
+Date: {stats.get('date', 'Today')}
+Trades: {stats.get('trades', 0)}
+P&L: <code>${stats.get('pnl', 0):+,.2f}</code>
+Win Rate: {stats.get('win_rate', 0):.1f}%
+Best Trade: <code>${stats.get('best_trade', 0):+,.2f}</code>
+Worst Trade: <code>${stats.get('worst_trade', 0):+,.2f}</code>
+"""
+        return await self._cmd_stats(ctx)
+
+    async def _cmd_weekly_stats(self, ctx: Dict) -> str:
+        """Handle /weekly command."""
+        pnl = self._get_pnl()
+        return f"""
+<b>📅 Weekly Statistics</b>
+
+Trades: {pnl.get('weekly_trades', pnl.get('trades', 0))}
+P&L: <code>${pnl.get('weekly_pnl', pnl.get('total_pnl', 0)):+,.2f}</code>
+Win Rate: {pnl.get('win_rate', 0):.1f}%
+"""
+
+    async def _cmd_monthly_stats(self, ctx: Dict) -> str:
+        """Handle /monthly command."""
+        pnl = self._get_pnl()
+        return f"""
+<b>📅 Monthly Statistics</b>
+
+Trades: {pnl.get('monthly_trades', pnl.get('trades', 0))}
+P&L: <code>${pnl.get('monthly_pnl', pnl.get('total_pnl', 0)):+,.2f}</code>
+Win Rate: {pnl.get('win_rate', 0):.1f}%
+"""
+
+    # =========================================================================
+    # Alert Commands
+    # =========================================================================
+
+    async def _cmd_alerts(self, ctx: Dict) -> str:
+        """Handle /alerts command."""
+        if not ctx["args"]:
+            status = "enabled ✅" if self._alerts_enabled else "disabled ❌"
+            return f"""
+<b>🔔 Alerts Configuration</b>
+
+Status: {status}
+
+<b>Commands:</b>
+/alerts on - Enable alerts
+/alerts off - Disable alerts
+"""
+
+        action = ctx["args"][0].lower()
+
+        if action in ["on", "enable", "true", "1"]:
+            self._alerts_enabled = True
+            # Register this chat for alerts
+            if ctx["chat_id"] not in self._alert_chat_ids:
+                self._alert_chat_ids.append(ctx["chat_id"])
+            return "✅ Alerts enabled. You will receive notifications."
+
+        elif action in ["off", "disable", "false", "0"]:
+            self._alerts_enabled = False
+            return "❌ Alerts disabled."
+
+        return "Usage: /alerts on|off"
+
+    # =========================================================================
+    # Strategy Commands
+    # =========================================================================
+
+    async def _cmd_strategies(self, ctx: Dict) -> str:
+        """Handle /strategies command."""
+        if self._get_strategies:
+            strategies = self._get_strategies()
+            lines = ["<b>📋 Trading Strategies</b>\n"]
+
+            for name, config in strategies.items():
+                enabled = config.get("enabled", False)
+                emoji = "✅" if enabled else "❌"
+                lines.append(f"{emoji} {name}")
+
+            lines.append("\n<b>Commands:</b>")
+            lines.append("/enable [strategy] - Enable")
+            lines.append("/disable [strategy] - Disable")
+
+            return "\n".join(lines)
+
+        return """
+<b>📋 Available Strategies</b>
+
+✅ orderbook_imbalance
+✅ volume_spike
+❌ mean_reversion
+❌ grid_trading
+❌ dca
+
+Use /enable or /disable to toggle.
+"""
+
+    async def _cmd_enable_strategy(self, ctx: Dict) -> str:
+        """Handle /enable command."""
+        if not ctx["is_admin"]:
+            return "⛔ Admin permission required."
+
+        if not ctx["args"]:
+            return "Usage: /enable [strategy_name]"
+
+        strategy = ctx["args"][0].lower()
+
+        if self._toggle_strategy:
+            success = await self._toggle_strategy(strategy, True)
+            if success:
+                return f"✅ Strategy '{strategy}' enabled."
+            return f"❌ Failed to enable '{strategy}'."
+
+        return f"✅ Strategy '{strategy}' would be enabled (callback not set)."
+
+    async def _cmd_disable_strategy(self, ctx: Dict) -> str:
+        """Handle /disable command."""
+        if not ctx["is_admin"]:
+            return "⛔ Admin permission required."
+
+        if not ctx["args"]:
+            return "Usage: /disable [strategy_name]"
+
+        strategy = ctx["args"][0].lower()
+
+        if self._toggle_strategy:
+            success = await self._toggle_strategy(strategy, False)
+            if success:
+                return f"✅ Strategy '{strategy}' disabled."
+            return f"❌ Failed to disable '{strategy}'."
+
+        return f"✅ Strategy '{strategy}' would be disabled (callback not set)."
+
+    # =========================================================================
+    # Exchange Commands
+    # =========================================================================
+
+    async def _cmd_exchange(self, ctx: Dict) -> str:
+        """Handle /exchange command."""
+        available = ["binance", "bybit", "okx", "kraken", "kucoin", "gateio"]
+
+        if not ctx["args"]:
+            return f"""
+<b>🏦 Exchange Configuration</b>
+
+Current: Binance (Testnet)
+
+<b>Available:</b>
+{', '.join(available)}
+
+<b>Usage:</b>
+/exchange binance
+/exchange bybit
+"""
+
+        exchange = ctx["args"][0].lower()
+        if exchange not in available:
+            return f"❌ Unknown exchange. Available: {', '.join(available)}"
+
+        return f"✅ Exchange would be changed to '{exchange}' (requires restart)."
+
+    # =========================================================================
+    # Quick Action Commands
+    # =========================================================================
+
+    async def _cmd_close_all(self, ctx: Dict) -> str:
+        """Handle /closeall command."""
+        if not ctx["is_admin"]:
+            return "⛔ Admin permission required."
+
+        if self._close_all_positions:
+            count = await self._close_all_positions()
+            return f"✅ Closed {count} position(s)."
+
+        # Fallback to closing each position
+        if self._get_positions and self._close_position:
+            positions = await self._get_positions()
+            closed = 0
+            for pos in positions:
+                success = await self._close_position(pos.get("symbol"))
+                if success:
+                    closed += 1
+            return f"✅ Closed {closed} position(s)."
+
+        return "❌ Close all positions not available."
+
+    async def _cmd_panic(self, ctx: Dict) -> str:
+        """Handle /panic command - emergency stop."""
+        if not ctx["is_admin"]:
+            return "⛔ Admin permission required."
+
+        result = []
+
+        # 1. Stop trading
+        if self._stop_trading:
+            await self._stop_trading()
+            result.append("🛑 Trading stopped")
+
+        # 2. Close all positions
+        if self._close_all_positions:
+            count = await self._close_all_positions()
+            result.append(f"📤 Closed {count} positions")
+        elif self._get_positions and self._close_position:
+            positions = await self._get_positions()
+            for pos in positions:
+                await self._close_position(pos.get("symbol"))
+            result.append(f"📤 Closed {len(positions)} positions")
+
+        self._state = BotState.STOPPED
+        self._paused = False
+
+        return f"""
+🚨 <b>PANIC - Emergency Stop</b>
+
+{chr(10).join(result)}
+
+All trading has been halted.
+Use /start_trading to resume.
+"""
+
+    # =========================================================================
+    # Automatic Notifications (Alert System)
+    # =========================================================================
+
+    async def send_alert(
+        self,
+        title: str,
+        message: str,
+        alert_type: str = "info",
+    ) -> None:
+        """
+        Send alert to all registered chat IDs.
+
+        Args:
+            title: Alert title
+            message: Alert message
+            alert_type: info, warning, error, trade
+        """
+        if not self._alerts_enabled:
+            return
+
+        emoji_map = {
+            "info": "ℹ️",
+            "warning": "⚠️",
+            "error": "❌",
+            "trade": "💰",
+            "position_open": "🟢",
+            "position_close": "🔴",
+            "profit": "📈",
+            "loss": "📉",
+            "sl_hit": "🛑",
+            "tp_hit": "🎯",
+        }
+
+        emoji = emoji_map.get(alert_type, "📢")
+        text = f"{emoji} <b>{title}</b>\n\n{message}"
+
+        for chat_id in self._alert_chat_ids:
+            try:
+                await self.send_message(chat_id, text)
+            except Exception as e:
+                logger.error(f"Failed to send alert to {chat_id}: {e}")
+
+    async def notify_position_opened(
+        self,
+        symbol: str,
+        side: str,
+        quantity: float,
+        price: float,
+        leverage: int = 10,
+    ) -> None:
+        """Send notification when position is opened."""
+        side_emoji = "🟢" if side.upper() == "BUY" else "🔴"
+        await self.send_alert(
+            "Position Opened",
+            f"""
+{side_emoji} <b>{side.upper()}</b> {symbol}
+
+📊 Quantity: {quantity}
+💰 Entry Price: ${price:,.2f}
+⚡ Leverage: {leverage}x
+📈 Notional: ${price * quantity:,.2f}
+""",
+            "position_open",
+        )
+
+    async def notify_position_closed(
+        self,
+        symbol: str,
+        side: str,
+        pnl: float,
+        pnl_pct: float,
+        exit_price: float,
+        duration: str = None,
+    ) -> None:
+        """Send notification when position is closed."""
+        pnl_emoji = "📈" if pnl > 0 else "📉"
+        alert_type = "profit" if pnl > 0 else "loss"
+
+        duration_str = f"\n⏱ Duration: {duration}" if duration else ""
+
+        await self.send_alert(
+            "Position Closed",
+            f"""
+{pnl_emoji} <b>{symbol}</b> {side.upper()}
+
+💰 P&L: <code>${pnl:+,.2f}</code> ({pnl_pct:+.2f}%)
+📤 Exit Price: ${exit_price:,.2f}{duration_str}
+""",
+            alert_type,
+        )
+
+    async def notify_stop_loss_hit(
+        self,
+        symbol: str,
+        pnl: float,
+        sl_price: float,
+    ) -> None:
+        """Send notification when stop-loss is triggered."""
+        await self.send_alert(
+            "Stop-Loss Triggered",
+            f"""
+🛑 <b>{symbol}</b>
+
+Position closed at stop-loss.
+💰 P&L: <code>${pnl:+,.2f}</code>
+📉 SL Price: ${sl_price:,.2f}
+""",
+            "sl_hit",
+        )
+
+    async def notify_take_profit_hit(
+        self,
+        symbol: str,
+        pnl: float,
+        tp_price: float,
+    ) -> None:
+        """Send notification when take-profit is triggered."""
+        await self.send_alert(
+            "Take-Profit Triggered",
+            f"""
+🎯 <b>{symbol}</b>
+
+Position closed at take-profit!
+💰 P&L: <code>${pnl:+,.2f}</code>
+📈 TP Price: ${tp_price:,.2f}
+""",
+            "tp_hit",
+        )
+
+    async def notify_daily_limit_reached(
+        self,
+        current_loss: float,
+        limit: float,
+    ) -> None:
+        """Send notification when daily loss limit is reached."""
+        await self.send_alert(
+            "Daily Loss Limit Reached",
+            f"""
+⚠️ Trading paused!
+
+Daily loss: <code>${current_loss:,.2f}</code>
+Limit: <code>${limit:,.2f}</code>
+
+Trading will resume tomorrow or when manually enabled.
+""",
+            "warning",
+        )
+
+    async def notify_error(
+        self,
+        error_type: str,
+        message: str,
+    ) -> None:
+        """Send notification for errors."""
+        await self.send_alert(
+            f"Error: {error_type}",
+            message,
+            "error",
+        )
+
+    async def notify_signal(
+        self,
+        symbol: str,
+        signal_type: str,
+        strength: float,
+        price: float,
+        strategy: str,
+    ) -> None:
+        """Send notification for trading signals."""
+        if not self._alerts_enabled:
+            return
+
+        emoji = "🟢" if signal_type == "LONG" else "🔴" if signal_type == "SHORT" else "⚪"
+
+        await self.send_alert(
+            "Trading Signal",
+            f"""
+{emoji} <b>{signal_type}</b> {symbol}
+
+📊 Strength: {strength * 100:.0f}%
+💰 Price: ${price:,.2f}
+🎯 Strategy: {strategy}
+""",
+            "info",
+        )
 
 
 # =============================================================================

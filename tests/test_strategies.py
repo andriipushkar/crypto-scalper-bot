@@ -454,12 +454,14 @@ class TestArbitrageDetector:
     def test_scan_cross_exchange_with_opportunity(self, detector):
         """Test scan with arbitrage opportunity."""
         # Buy low on binance, sell high on bybit
+        # Need spread_pct > fee_pct(0.2%) + slippage(0.1%) + min_profit(0.1%) = 0.4%
+        # spread >= 50010 * 0.004 = 200
         detector.update_price("binance", "BTCUSDT", Decimal("50000"), Decimal("50010"), Decimal("100"))
-        detector.update_price("bybit", "BTCUSDT", Decimal("50100"), Decimal("50110"), Decimal("100"))
+        detector.update_price("bybit", "BTCUSDT", Decimal("50250"), Decimal("50260"), Decimal("100"))
 
         opportunities = detector.scan_cross_exchange("BTCUSDT")
 
-        # Should find opportunity
+        # Should find opportunity (spread = 240, spread_pct = 0.48%)
         assert len(opportunities) > 0
 
     def test_opportunity_profitability_check(self, detector):

@@ -137,11 +137,9 @@ class PaperTradingEngine:
     @property
     def available_balance(self) -> Decimal:
         """Available balance for new orders."""
-        margin_used = sum(
-            (p.quantity * p.entry_price) / p.leverage
-            for p in self.positions.values()
-        )
-        return self.balance - margin_used
+        # Balance already has margin deducted when positions are opened
+        # So we just return the current balance
+        return self.balance
 
     def update_price(self, symbol: str, price: Decimal, bid: Optional[Decimal] = None, ask: Optional[Decimal] = None):
         """Update market price for symbol."""
