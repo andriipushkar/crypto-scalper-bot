@@ -689,7 +689,7 @@ class TestHelperFunctions:
         html = get_dashboard_html()
 
         assert "<!DOCTYPE html>" in html
-        assert "Crypto Scalper Dashboard" in html
+        assert "Crypto Futures Trading Bot" in html
         assert "WebSocket" in html
 
 

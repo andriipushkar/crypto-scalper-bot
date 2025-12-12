@@ -117,7 +117,7 @@ class TestHealthEndpoints:
         response = await client.get("/")
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
-        assert "Crypto Scalper Dashboard" in response.text
+        assert "Futures Bot" in response.text
 
 
 # =============================================================================

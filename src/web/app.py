@@ -25,6 +25,8 @@ from loguru import logger
 from pydantic import BaseModel
 
 from src.data.models import Signal, SignalType, Order, Position, Side
+from src.data.trade_history_db import trade_history_db
+from src.web.dashboard_html import get_dashboard_html
 from src.web.middleware import (
     init_security,
     RateLimitMiddleware,
@@ -62,6 +64,8 @@ class PositionResponse(BaseModel):
     unrealized_pnl: float
     unrealized_pnl_pct: float
     leverage: int
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
 
 
 class TradeResponse(BaseModel):
@@ -253,8 +257,24 @@ class DashboardState:
     def __init__(self):
         self.start_time = datetime.utcnow()
         self.status = "stopped"
-        self.mode = "paper"
-        self.symbols = ["BTCUSDT"]
+        self.mode = "paper"  # paper, live, backtest
+        self.selected_symbols = ["BTCUSDT"]  # Вибрані для торгівлі
+
+        # Доступні символи з цінами
+        self.available_symbols = {
+            "BTCUSDT": {"name": "Bitcoin", "price": 97245.0, "change_24h": 2.34, "volume_24h": 45000000000},
+            "ETHUSDT": {"name": "Ethereum", "price": 3642.0, "change_24h": 1.87, "volume_24h": 18000000000},
+            "SOLUSDT": {"name": "Solana", "price": 227.0, "change_24h": -0.54, "volume_24h": 4500000000},
+            "XRPUSDT": {"name": "Ripple", "price": 2.31, "change_24h": 5.21, "volume_24h": 8000000000},
+            "DOGEUSDT": {"name": "Dogecoin", "price": 0.408, "change_24h": 3.12, "volume_24h": 2500000000},
+            "BNBUSDT": {"name": "BNB", "price": 715.0, "change_24h": 1.45, "volume_24h": 1800000000},
+            "ADAUSDT": {"name": "Cardano", "price": 1.05, "change_24h": 2.8, "volume_24h": 1200000000},
+            "AVAXUSDT": {"name": "Avalanche", "price": 45.2, "change_24h": 4.1, "volume_24h": 900000000},
+            "DOTUSDT": {"name": "Polkadot", "price": 8.45, "change_24h": 1.9, "volume_24h": 650000000},
+            "LINKUSDT": {"name": "Chainlink", "price": 24.8, "change_24h": 3.5, "volume_24h": 780000000},
+            "MATICUSDT": {"name": "Polygon", "price": 0.52, "change_24h": 2.1, "volume_24h": 420000000},
+            "UNIUSDT": {"name": "Uniswap", "price": 14.2, "change_24h": 1.3, "volume_24h": 350000000},
+        }
 
         # Real-time data
         self.positions: Dict[str, Position] = {}
@@ -263,6 +283,15 @@ class DashboardState:
         self.equity_curve: List[Dict] = []
         self.orders: Dict[str, Dict] = {}  # Open orders
 
+        # Баланс
+        self.balance = {
+            "total": 1000.0,
+            "available": 1000.0,
+            "in_positions": 0.0,
+            "unrealized_pnl": 0.0,
+            "margin_used": 0.0,
+        }
+
         # Metrics
         self.metrics = {
             "total_trades": 0,
@@ -270,6 +299,7 @@ class DashboardState:
             "losing_trades": 0,
             "win_rate": 0.0,
             "total_pnl": 0.0,
+            "daily_pnl": 0.0,
             "gross_profit": 0.0,
             "gross_loss": 0.0,
             "profit_factor": 0.0,
@@ -283,10 +313,33 @@ class DashboardState:
         self.prices: Dict[str, float] = {}
         self.orderbook_stats: Dict[str, Dict] = {}
 
-        # Exchange configuration
+        # Доступні біржі
+        self.available_exchanges = {
+            "binance": {"name": "Binance", "testnet": True, "futures": True, "logo": "🟡"},
+            "bybit": {"name": "Bybit", "testnet": True, "futures": True, "logo": "🟠"},
+            "okx": {"name": "OKX", "testnet": True, "futures": True, "logo": "⚫"},
+            "kraken": {"name": "Kraken", "testnet": False, "futures": True, "logo": "🟣"},
+            "kucoin": {"name": "KuCoin", "testnet": True, "futures": True, "logo": "🟢"},
+            "gateio": {"name": "Gate.io", "testnet": True, "futures": True, "logo": "🔵"},
+        }
+
+        # Вибрані біржі (може бути декілька)
+        self.selected_exchanges = ["binance"]
+
+        # Exchange configuration (legacy - для сумісності)
         self.exchange_config = {
             "exchange": "binance",
             "testnet": True,
+        }
+
+        # Backtest configuration
+        self.backtest_config = {
+            "start_date": "2024-01-01",
+            "end_date": "2024-12-01",
+            "initial_balance": 1000.0,
+            "running": False,
+            "progress": 0,
+            "results": None,
         }
 
         # Risk configuration
@@ -301,50 +354,106 @@ class DashboardState:
         }
 
         # Strategy configurations
+        # Based on backtest results (2025-01-01 to 2025-12-12)
         self.strategies_config = {
+            # ============================================
+            # TOP PERFORMERS - ENABLED
+            # ============================================
+            "cluster_analysis": {
+                "enabled": True,  # +162.6% return, Sharpe 0.96, MaxDD 14.6%
+                "cluster_size_ticks": 10,
+                "value_area_percent": 70,
+                "imbalance_threshold": 65,
+                "weight": 0.35,
+                "description": "Кластерний аналіз (POC, Value Area, Delta)",
+                "backtest_return": "+162.6%",
+            },
+            "mean_reversion": {
+                "enabled": True,  # +107.1% return, Sharpe 0.68, MaxDD 15.7%
+                "lookback_period": 20,
+                "std_dev_multiplier": 2.0,
+                "entry_z_score": 2.0,
+                "description": "Mean Reversion (Z-score based)",
+                "backtest_return": "+107.1%",
+            },
+            "volume_spike": {
+                "enabled": True,  # +47.6% return, Sharpe 0.47, MaxDD 11.5%
+                "volume_multiplier": 3.0,
+                "lookback_seconds": 60,
+                "min_volume_usd": 10000,
+                "signal_cooldown": 15,
+                "description": "Volume Spike Detection",
+                "backtest_return": "+47.6%",
+            },
             "orderbook_imbalance": {
-                "enabled": True,
+                "enabled": True,  # +34.9% return, Sharpe 0.42, MaxDD 15.3%
                 "imbalance_threshold": 1.5,
                 "max_spread": 0.0005,
                 "signal_cooldown": 10,
                 "levels": 5,
                 "min_volume_usd": 5000,
+                "description": "Orderbook Imbalance",
+                "backtest_return": "+34.9%",
             },
-            "volume_spike": {
-                "enabled": True,
-                "volume_multiplier": 3.0,
-                "lookback_seconds": 60,
-                "min_volume_usd": 10000,
-                "signal_cooldown": 15,
-            },
-            "mean_reversion": {
-                "enabled": False,
-                "lookback_period": 20,
-                "std_dev_multiplier": 2.0,
-                "entry_z_score": 2.0,
-            },
-            "grid_trading": {
-                "enabled": False,
-                "grid_levels": 10,
-                "range_percent": 0.05,
-            },
-            "dca": {
-                "enabled": False,
-                "mode": "hybrid",
-                "interval_minutes": 60,
-            },
-            # ============================================
-            # Advanced Scalping Strategies (Просунутий скальпінг)
-            # ============================================
             "hybrid_scalping": {
-                "enabled": True,
+                "enabled": True,  # +20.3% return, Sharpe 0.36, MaxDD 14.8%
                 "min_confirmations": 2,
                 "min_combined_weight": 0.5,
                 "signal_cooldown": 30,
                 "description": "Гібридна стратегія (комбінує всі скальпінг-методи)",
+                "backtest_return": "+20.3%",
             },
+            "print_tape": {
+                "enabled": True,  # +18.5% return, Sharpe 0.33, MaxDD 16.1%
+                "whale_threshold_usd": 50000,
+                "cvd_window": 60,
+                "delta_threshold": 60,
+                "min_whale_trades": 3,
+                "weight": 0.25,
+                "description": "Лента принтів (CVD, whale trades)",
+                "backtest_return": "+18.5%",
+            },
+            "order_flow": {
+                "enabled": True,  # +9.1% return, Sharpe 0.32, MaxDD 25.1%
+                "aggressive_threshold": 0.7,
+                "volume_ratio_min": 1.5,
+                "weight": 0.20,
+                "description": "Order Flow Analysis",
+                "backtest_return": "+9.1%",
+            },
+            # ============================================
+            # OPTIMIZED V9 - HYBRID TA FILTERS + DYNAMIC BLACKLIST
+            # ============================================
+            "impulse_scalping": {
+                "enabled": True,  # V9: +52.3% return, WR 44.7%, PF 1.30
+                "macd_fast": 12,
+                "macd_slow": 26,
+                "trend_sma": 50,
+                # Volatility filters
+                "vol_filter_enabled": True,
+                "vol_low_threshold": 0.8,  # Skip if ATR% < 0.8
+                "vol_high_threshold": 2.5,
+                # Technical Analysis filters
+                "adx_min": 20,  # ADX > 20 for trending market
+                "efficiency_ratio_min": 0.3,  # ER > 0.3 for clean trends
+                # Entry filters
+                "trend_strength_min": 1.0,  # Price > 1% from SMA
+                "candle_body_ratio": 0.6,  # Body > 60% of range
+                # Dynamic blacklist (poor historical performance)
+                "blacklist": ["ATOMUSDT", "MKRUSDT", "THETAUSDT", "APEUSDT",
+                              "XTZUSDT", "FILUSDT", "EOSUSDT"],
+                "weight": 0.25,
+                "description": "Volatility-Adaptive MACD with ADX/ER Filters (V9)",
+                "backtest_return": "+52.3%",
+                "backtest_winrate": "44.7%",
+                "backtest_pf": "1.30",
+                "backtest_trades": 1388,
+            },
+            # ============================================
+            # UNPROFITABLE - DISABLED
+            # ============================================
             "advanced_orderbook": {
-                "enabled": True,
+                "enabled": False,  # -15.0% return, MaxDD 29.1%
                 "wall_multiplier": 5.0,
                 "min_wall_value_usd": 50000,
                 "frontrunning_enabled": True,
@@ -352,31 +461,32 @@ class DashboardState:
                 "iceberg_detection": True,
                 "weight": 0.35,
                 "description": "Аналіз стакану (стіни, фронтраннінг, спуфінг)",
+                "backtest_return": "-15.0%",
+                "reason_disabled": "Negative return, needs V2 optimization",
             },
-            "print_tape": {
-                "enabled": True,
-                "whale_threshold_usd": 50000,
-                "cvd_window": 60,
-                "delta_threshold": 60,
-                "min_whale_trades": 3,
-                "weight": 0.25,
-                "description": "Лента принтів (CVD, whale trades)",
+            "dca": {
+                "enabled": False,  # -15.6% return, MaxDD 25.1%
+                "mode": "hybrid",
+                "interval_minutes": 60,
+                "description": "Dollar Cost Averaging",
+                "backtest_return": "-15.6%",
+                "reason_disabled": "Loses money without trend filter",
             },
-            "cluster_analysis": {
-                "enabled": True,
-                "cluster_size_ticks": 10,
-                "value_area_percent": 70,
-                "imbalance_threshold": 65,
-                "weight": 0.15,
-                "description": "Кластерний аналіз (POC, Value Area, Delta)",
+            "grid_trading": {
+                "enabled": False,  # -61.1% return, MaxDD 105.5% - DANGEROUS
+                "grid_levels": 10,
+                "range_percent": 0.05,
+                "description": "Grid Trading",
+                "backtest_return": "-61.1%",
+                "reason_disabled": "DANGEROUS - extreme drawdown in trending markets",
             },
-            "impulse_scalping": {
-                "enabled": False,
-                "min_leader_move": 0.3,
-                "impulse_ttl": 300,
-                "correlation_lag": 60,
-                "weight": 0.25,
-                "description": "Імпульсний скальпінг (SPX/DXY/GOLD/VIX)",
+            "dca_grid": {
+                "enabled": False,  # -77.1% return, MaxDD 83.1% - DANGEROUS
+                "dca_levels": 3,
+                "grid_levels": 5,
+                "description": "DCA + Grid Combined",
+                "backtest_return": "-77.1%",
+                "reason_disabled": "DANGEROUS - averaging down destroys capital",
             },
         }
 
@@ -413,6 +523,44 @@ class DashboardState:
 # Global instances
 manager = ConnectionManager()
 state = DashboardState()
+
+# Initialize trade history database
+trade_history_db.connect()
+
+# Load trades from database into state
+try:
+    db_trades = trade_history_db.get_trades(limit=100)
+    state.trades = [
+        {
+            'id': t.get('trade_id', ''),
+            'symbol': t.get('symbol', ''),
+            'side': t.get('side', ''),
+            'entry_time': t.get('entry_time', ''),
+            'exit_time': t.get('exit_time', ''),
+            'entry_price': t.get('entry_price', 0),
+            'exit_price': t.get('exit_price', 0),
+            'quantity': t.get('quantity', 0),
+            'pnl': t.get('pnl', 0),
+            'pnl_pct': t.get('pnl_pct', 0),
+            'strategy': t.get('strategy', 'manual'),
+        }
+        for t in db_trades
+    ]
+    # Update metrics from DB stats
+    db_stats = trade_history_db.get_stats()
+    state.metrics.update({
+        'total_trades': db_stats.get('total_trades', 0),
+        'winning_trades': db_stats.get('winning_trades', 0),
+        'losing_trades': db_stats.get('losing_trades', 0),
+        'win_rate': db_stats.get('win_rate', 0),
+        'total_pnl': db_stats.get('total_pnl', 0),
+        'gross_profit': db_stats.get('gross_profit', 0),
+        'gross_loss': db_stats.get('gross_loss', 0),
+        'profit_factor': db_stats.get('profit_factor', 0),
+    })
+    logger.info(f"Loaded {len(state.trades)} trades from database")
+except Exception as e:
+    logger.error(f"Failed to load trades from database: {e}")
 
 
 # =============================================================================
@@ -578,7 +726,7 @@ def create_app(
                 "data": {
                     "status": state.status,
                     "mode": state.mode,
-                    "symbols": state.symbols,
+                    "symbols": state.selected_symbols,
                     "positions": _serialize_positions(),
                     "metrics": state.metrics,
                 }
@@ -617,7 +765,7 @@ def create_app(
             uptime_seconds=state.uptime_seconds,
             mode=state.mode,
             connected_exchanges=["binance_futures"],
-            active_symbols=state.symbols,
+            active_symbols=state.selected_symbols,
         )
 
     @app.post("/api/command")
@@ -684,6 +832,87 @@ def create_app(
             for t in trades
         ]
 
+    @app.get("/api/trades/history")
+    async def get_trades_history(limit: int = Query(50, ge=1, le=500)):
+        """Get trade history for dashboard (simplified format)."""
+        trades = state.trades[-limit:] if state.trades else []
+        # Reverse to get newest first
+        trades = list(reversed(trades))
+        return [
+            {
+                "symbol": t.get("symbol", ""),
+                "side": t.get("side", ""),
+                "entry_price": t.get("entry_price", 0),
+                "exit_price": t.get("exit_price", 0),
+                "pnl": t.get("pnl", 0),
+                "pnl_pct": t.get("pnl_pct", 0),
+                "strategy": t.get("strategy", "Manual"),
+                "closed_at": t.get("exit_time", t.get("closed_at", "")),
+            }
+            for t in trades
+        ]
+
+    # =========================================================================
+    # Database Trade History Endpoints
+    # =========================================================================
+
+    @app.get("/api/trades/db")
+    async def get_trades_from_db(
+        limit: int = Query(50, ge=1, le=500),
+        offset: int = Query(0, ge=0),
+        symbol: Optional[str] = None,
+        strategy: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ):
+        """Get trade history from database with filters."""
+        trades = trade_history_db.get_trades(
+            limit=limit,
+            offset=offset,
+            symbol=symbol,
+            strategy=strategy,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        total = trade_history_db.get_trade_count(symbol=symbol, strategy=strategy)
+        return {
+            "trades": trades,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+
+    @app.get("/api/trades/stats")
+    async def get_trading_stats(
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ):
+        """Get trading statistics from database."""
+        return trade_history_db.get_stats(start_date=start_date, end_date=end_date)
+
+    @app.get("/api/trades/daily")
+    async def get_daily_pnl(days: int = Query(30, ge=1, le=365)):
+        """Get daily P&L for last N days."""
+        return trade_history_db.get_daily_pnl(days=days)
+
+    @app.get("/api/trades/by-symbol")
+    async def get_pnl_by_symbol():
+        """Get P&L breakdown by symbol."""
+        return trade_history_db.get_pnl_by_symbol()
+
+    @app.get("/api/trades/by-strategy")
+    async def get_pnl_by_strategy():
+        """Get P&L breakdown by strategy."""
+        return trade_history_db.get_pnl_by_strategy()
+
+    @app.delete("/api/trades/db/{trade_id}")
+    async def delete_trade_from_db(trade_id: str):
+        """Delete a trade from database."""
+        success = trade_history_db.delete_trade(trade_id)
+        if success:
+            return {"success": True, "message": f"Trade {trade_id} deleted"}
+        raise HTTPException(status_code=404, detail=f"Trade {trade_id} not found")
+
     @app.get("/api/metrics", response_model=MetricsResponse)
     async def get_metrics():
         """Get performance metrics."""
@@ -741,7 +970,7 @@ def create_app(
         """Get current configuration."""
         return {
             "mode": state.mode,
-            "symbols": state.symbols,
+            "symbols": state.selected_symbols,
             "leverage": state.leverage,
             "exchange": state.exchange_config,
             "risk": state.risk_config,
@@ -762,7 +991,7 @@ def create_app(
 
         if key == "symbols":
             if isinstance(value, list):
-                state.symbols = value
+                state.selected_symbols = value
                 return {"success": True, "message": f"Symbols set to {value}"}
             raise HTTPException(status_code=400, detail="Symbols must be a list")
 
@@ -899,6 +1128,13 @@ def create_app(
             "strategy": "manual",
         }
         state.trades.append(trade)
+
+        # Save to database
+        try:
+            trade_history_db.save_trade(trade)
+            logger.info(f"Trade saved to DB: {trade.get('id')}")
+        except Exception as e:
+            logger.error(f"Failed to save trade to DB: {e}")
 
         # Update metrics
         state.metrics["total_trades"] += 1
@@ -1130,6 +1366,57 @@ def create_app(
             "config": state.exchange_config,
         }
 
+    @app.get("/api/exchanges")
+    async def get_exchanges():
+        """Get all exchanges with selection status."""
+        return {
+            "available": state.available_exchanges,
+            "selected": state.selected_exchanges,
+        }
+
+    @app.post("/api/exchanges/select")
+    async def select_exchanges(exchanges: List[str]):
+        """Select exchanges for trading (can select multiple)."""
+        available = list(state.available_exchanges.keys())
+        invalid = [e for e in exchanges if e not in available]
+        if invalid:
+            raise HTTPException(status_code=400, detail=f"Unknown exchanges: {invalid}")
+
+        if not exchanges:
+            raise HTTPException(status_code=400, detail="At least one exchange must be selected")
+
+        state.selected_exchanges = exchanges
+
+        # Update legacy config with first selected exchange
+        state.exchange_config["exchange"] = exchanges[0]
+
+        state.add_log("INFO", f"Selected exchanges: {exchanges}", "config")
+
+        return {"success": True, "selected": exchanges}
+
+    @app.post("/api/exchanges/{exchange}/toggle")
+    async def toggle_exchange(exchange: str):
+        """Toggle exchange selection."""
+        if exchange not in state.available_exchanges:
+            raise HTTPException(status_code=404, detail=f"Exchange {exchange} not found")
+
+        if exchange in state.selected_exchanges:
+            if len(state.selected_exchanges) <= 1:
+                raise HTTPException(status_code=400, detail="At least one exchange must be selected")
+            state.selected_exchanges.remove(exchange)
+        else:
+            state.selected_exchanges.append(exchange)
+
+        # Update legacy config
+        state.exchange_config["exchange"] = state.selected_exchanges[0]
+
+        return {
+            "success": True,
+            "exchange": exchange,
+            "enabled": exchange in state.selected_exchanges,
+            "selected": state.selected_exchanges,
+        }
+
     # =========================================================================
     # Logs Endpoint
     # =========================================================================
@@ -1186,6 +1473,401 @@ def create_app(
         }
 
     # =========================================================================
+    # Balance Endpoints
+    # =========================================================================
+
+    @app.get("/api/balance")
+    async def get_balance():
+        """Get account balance."""
+        # Оновлюємо баланс на основі позицій
+        total_in_positions = sum(
+            float(pos.size) * float(pos.entry_price) / pos.leverage
+            for pos in state.positions.values()
+        )
+        total_unrealized = sum(
+            float(pos.unrealized_pnl)
+            for pos in state.positions.values()
+        )
+        state.balance["in_positions"] = total_in_positions
+        state.balance["unrealized_pnl"] = total_unrealized
+        state.balance["available"] = state.balance["total"] - total_in_positions + state.metrics["total_pnl"]
+
+        return state.balance
+
+    @app.put("/api/balance")
+    async def set_balance(amount: float = Query(..., gt=0)):
+        """Set initial balance (for paper trading)."""
+        if state.mode == "live":
+            raise HTTPException(status_code=400, detail="Cannot set balance in live mode")
+
+        state.balance["total"] = amount
+        state.balance["available"] = amount
+        state.add_log("INFO", f"Balance set to ${amount}", "balance")
+
+        return {"success": True, "balance": state.balance}
+
+    # =========================================================================
+    # Symbols Management
+    # =========================================================================
+
+    @app.get("/api/symbols")
+    async def get_symbols():
+        """Get all available symbols with prices."""
+        return {
+            "available": state.available_symbols,
+            "selected": state.selected_symbols,
+        }
+
+    @app.post("/api/symbols/select")
+    async def select_symbols(symbols: List[str]):
+        """Select symbols for trading."""
+        # Валідуємо символи
+        invalid = [s for s in symbols if s not in state.available_symbols]
+        if invalid:
+            raise HTTPException(status_code=400, detail=f"Invalid symbols: {invalid}")
+
+        state.selected_symbols = symbols
+        state.add_log("INFO", f"Selected symbols: {symbols}", "config")
+
+        await manager.broadcast({
+            "type": "symbols_update",
+            "data": {"selected": symbols}
+        })
+
+        return {"success": True, "selected": symbols}
+
+    @app.post("/api/symbols/add")
+    async def add_symbol(symbol: str, name: str = "Unknown"):
+        """Add a new symbol to available list."""
+        symbol = symbol.upper()
+        if symbol in state.available_symbols:
+            raise HTTPException(status_code=400, detail=f"Symbol {symbol} already exists")
+
+        state.available_symbols[symbol] = {
+            "name": name,
+            "price": 0.0,
+            "change_24h": 0.0,
+            "volume_24h": 0,
+        }
+
+        return {"success": True, "symbol": symbol}
+
+    @app.delete("/api/symbols/{symbol}")
+    async def remove_symbol(symbol: str):
+        """Remove a symbol from available list."""
+        symbol = symbol.upper()
+        if symbol not in state.available_symbols:
+            raise HTTPException(status_code=404, detail=f"Symbol {symbol} not found")
+
+        if len(state.available_symbols) <= 1:
+            raise HTTPException(status_code=400, detail="Cannot remove last symbol")
+
+        # Remove from available
+        del state.available_symbols[symbol]
+
+        # Remove from selected if present
+        if symbol in state.selected_symbols:
+            state.selected_symbols.remove(symbol)
+            # Ensure at least one symbol is selected
+            if not state.selected_symbols and state.available_symbols:
+                state.selected_symbols.append(list(state.available_symbols.keys())[0])
+
+        return {"success": True, "symbol": symbol, "selected": state.selected_symbols}
+
+    # =========================================================================
+    # Trading Mode
+    # =========================================================================
+
+    @app.get("/api/mode")
+    async def get_mode():
+        """Get current trading mode."""
+        return {
+            "mode": state.mode,
+            "available_modes": ["paper", "live", "backtest"],
+            "backtest_config": state.backtest_config if state.mode == "backtest" else None,
+        }
+
+    @app.put("/api/mode")
+    async def set_mode(mode: str):
+        """Set trading mode: paper, live, or backtest."""
+        if mode not in ["paper", "live", "backtest"]:
+            raise HTTPException(status_code=400, detail="Mode must be: paper, live, or backtest")
+
+        old_mode = state.mode
+        state.mode = mode
+
+        # Якщо перемикаємось на live - попередження
+        if mode == "live" and old_mode != "live":
+            state.add_log("WARNING", "Switched to LIVE trading mode!", "config")
+
+        # Якщо перемикаємось на backtest - зупиняємо бота
+        if mode == "backtest":
+            state.status = "stopped"
+            state.add_log("INFO", "Switched to backtest mode", "config")
+
+        await manager.broadcast({
+            "type": "mode_change",
+            "data": {"mode": mode}
+        })
+
+        return {"success": True, "mode": mode}
+
+    # =========================================================================
+    # Backtest Endpoints
+    # =========================================================================
+
+    @app.get("/api/backtest/config")
+    async def get_backtest_config():
+        """Get backtest configuration."""
+        return state.backtest_config
+
+    @app.put("/api/backtest/config")
+    async def update_backtest_config(
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        initial_balance: Optional[float] = None,
+    ):
+        """Update backtest configuration."""
+        if start_date:
+            state.backtest_config["start_date"] = start_date
+        if end_date:
+            state.backtest_config["end_date"] = end_date
+        if initial_balance:
+            state.backtest_config["initial_balance"] = initial_balance
+
+        return {"success": True, "config": state.backtest_config}
+
+    @app.post("/api/backtest/run")
+    async def run_backtest():
+        """Start backtest with current configuration using real historical data."""
+        if state.mode != "backtest":
+            raise HTTPException(status_code=400, detail="Switch to backtest mode first")
+
+        if state.backtest_config["running"]:
+            raise HTTPException(status_code=400, detail="Backtest already running")
+
+        state.backtest_config["running"] = True
+        state.backtest_config["progress"] = 0
+        state.add_log("INFO", "Backtest started - downloading historical data...", "backtest")
+
+        from src.backtesting.data import HistoricalDataLoader, OHLCV
+        from src.backtesting.engine import BacktestEngine, BacktestConfig, OrderSide
+
+        async def real_backtest():
+            try:
+                # Parse dates
+                start_date = datetime.strptime(state.backtest_config["start_date"], "%Y-%m-%d")
+                end_date = datetime.strptime(state.backtest_config["end_date"], "%Y-%m-%d")
+
+                # Initialize data loader
+                data_loader = HistoricalDataLoader()
+                symbols = state.selected_symbols or ["BTCUSDT"]
+                timeframe = "1h"  # 1-hour candles
+
+                # Download data for all symbols
+                all_data: Dict[str, List[OHLCV]] = {}
+                total_symbols = len(symbols)
+
+                for idx, symbol in enumerate(symbols):
+                    state.backtest_config["progress"] = int((idx / total_symbols) * 30)
+                    state.add_log("INFO", f"Downloading {symbol}...", "backtest")
+
+                    await manager.broadcast({
+                        "type": "backtest_progress",
+                        "data": {"progress": state.backtest_config["progress"], "status": f"Downloading {symbol}..."}
+                    })
+
+                    try:
+                        candles = await data_loader.get_data(
+                            symbol=symbol,
+                            timeframe=timeframe,
+                            start_time=start_date,
+                            end_time=end_date,
+                            use_cache=True
+                        )
+                        if candles:
+                            all_data[symbol] = candles
+                            state.add_log("INFO", f"Downloaded {len(candles)} candles for {symbol}", "backtest")
+                    except Exception as e:
+                        state.add_log("WARNING", f"Failed to download {symbol}: {e}", "backtest")
+
+                if not all_data:
+                    raise ValueError("No data downloaded for any symbol")
+
+                # Configure backtest engine
+                config = BacktestConfig(
+                    initial_balance=state.backtest_config["initial_balance"],
+                    commission_rate=0.0004,  # 0.04% Binance futures fee
+                    slippage=0.0001,  # 0.01%
+                    leverage=10,
+                )
+                engine = BacktestEngine(config)
+
+                # Simple scalping strategy
+                def scalping_strategy(eng: BacktestEngine, symbol: str, candle: OHLCV, history: List[OHLCV]):
+                    if len(history) < 20:
+                        return
+
+                    # Calculate simple indicators
+                    closes = [c.close for c in history[-20:]]
+                    sma_short = sum(closes[-5:]) / 5
+                    sma_long = sum(closes[-20:]) / 20
+
+                    current_price = candle.close
+                    has_position = symbol in eng.positions
+
+                    # Entry logic
+                    if not has_position:
+                        # Bullish crossover
+                        if sma_short > sma_long * 1.001:  # 0.1% above
+                            qty = (eng.get_available_balance() * 0.1) / current_price
+                            if qty > 0:
+                                order = eng.place_order(symbol, OrderSide.BUY, qty)
+                                if order and order.filled:
+                                    # Set SL/TP
+                                    eng.set_stop_loss(symbol, current_price * 0.99)  # 1% SL
+                                    eng.set_take_profit(symbol, current_price * 1.015)  # 1.5% TP
+                        # Bearish crossover (short)
+                        elif sma_short < sma_long * 0.999:  # 0.1% below
+                            qty = (eng.get_available_balance() * 0.1) / current_price
+                            if qty > 0 and config.allow_shorting:
+                                order = eng.place_order(symbol, OrderSide.SELL, qty)
+                                if order and order.filled:
+                                    eng.set_stop_loss(symbol, current_price * 1.01)
+                                    eng.set_take_profit(symbol, current_price * 0.985)
+
+                state.add_log("INFO", "Running backtest...", "backtest")
+                state.backtest_config["progress"] = 35
+
+                # Run backtest
+                result = engine.run(
+                    strategy=scalping_strategy,
+                    data=all_data,
+                    warmup_period=50
+                )
+
+                state.backtest_config["progress"] = 95
+
+                # Convert results
+                trades_data = [
+                    {
+                        "id": t.id,
+                        "symbol": t.symbol,
+                        "side": t.side.upper(),
+                        "entry_price": t.entry_price,
+                        "exit_price": t.exit_price,
+                        "quantity": t.quantity,
+                        "pnl": round(t.pnl, 2),
+                        "pnl_pct": round(t.pnl_pct, 2),
+                        "entry_time": t.entry_time.isoformat(),
+                        "exit_time": t.exit_time.isoformat(),
+                        "commission": round(t.commission, 4),
+                    }
+                    for t in result.trades
+                ]
+
+                equity_curve = [e["equity"] for e in result.equity_curve]
+
+                state.backtest_config["results"] = {
+                    "total_trades": result.total_trades,
+                    "winning_trades": result.winning_trades,
+                    "losing_trades": result.losing_trades,
+                    "win_rate": round(result.win_rate, 2),
+                    "total_pnl": round(result.total_return, 2),
+                    "total_return_pct": round(result.total_return_pct, 2),
+                    "profit_factor": round(result.profit_factor, 2) if result.profit_factor != float('inf') else 999,
+                    "max_drawdown": round(result.max_drawdown, 2),
+                    "max_drawdown_pct": round(result.max_drawdown_pct, 2),
+                    "sharpe_ratio": round(result.sharpe_ratio, 2),
+                    "avg_trade": round(result.avg_trade, 2),
+                    "avg_win": round(result.avg_win, 2),
+                    "avg_loss": round(result.avg_loss, 2),
+                    "largest_win": round(result.largest_win, 2),
+                    "largest_loss": round(result.largest_loss, 2),
+                    "max_consecutive_wins": result.max_consecutive_wins,
+                    "max_consecutive_losses": result.max_consecutive_losses,
+                    "initial_balance": result.initial_balance,
+                    "final_balance": round(result.final_balance, 2),
+                    "start_date": result.start_time.isoformat(),
+                    "end_date": result.end_time.isoformat(),
+                    "symbols_tested": list(all_data.keys()),
+                    "trades": trades_data[-100:],  # Last 100 trades
+                    "equity_curve": equity_curve,
+                }
+
+                state.backtest_config["progress"] = 100
+                state.backtest_config["running"] = False
+
+                state.add_log(
+                    "INFO",
+                    f"Backtest completed: {result.total_trades} trades, "
+                    f"P&L: ${result.total_return:.2f} ({result.total_return_pct:.1f}%), "
+                    f"Win Rate: {result.win_rate:.1f}%",
+                    "backtest"
+                )
+
+                await manager.broadcast({
+                    "type": "backtest_complete",
+                    "data": state.backtest_config["results"]
+                })
+
+            except Exception as e:
+                state.backtest_config["running"] = False
+                state.add_log("ERROR", f"Backtest failed: {str(e)}", "backtest")
+                logger.exception("Backtest error")
+
+                await manager.broadcast({
+                    "type": "backtest_error",
+                    "data": {"error": str(e)}
+                })
+
+        asyncio.create_task(real_backtest())
+
+        return {"success": True, "message": "Backtest started - downloading historical data..."}
+
+    @app.get("/api/backtest/results")
+    async def get_backtest_results():
+        """Get backtest results."""
+        return {
+            "running": state.backtest_config["running"],
+            "progress": state.backtest_config["progress"],
+            "results": state.backtest_config["results"],
+        }
+
+    @app.post("/api/backtest/stop")
+    async def stop_backtest():
+        """Stop running backtest."""
+        state.backtest_config["running"] = False
+        return {"success": True, "message": "Backtest stopped"}
+
+    # =========================================================================
+    # Full State Endpoint
+    # =========================================================================
+
+    @app.get("/api/state")
+    async def get_full_state():
+        """Get full dashboard state."""
+        return {
+            "status": state.status,
+            "mode": state.mode,
+            "exchange": state.exchange_config,
+            "exchanges": {
+                "available": state.available_exchanges,
+                "selected": state.selected_exchanges,
+            },
+            "symbols": {
+                "available": state.available_symbols,
+                "selected": state.selected_symbols,
+            },
+            "balance": state.balance,
+            "positions": _serialize_positions(),
+            "metrics": state.metrics,
+            "strategies": state.strategies_config,
+            "risk": state.risk_config,
+            "backtest": state.backtest_config,
+        }
+
+    # =========================================================================
     # Health Check
     # =========================================================================
 
@@ -1217,900 +1899,19 @@ def _serialize_positions() -> List[Dict]:
             "symbol": pos.symbol,
             "side": pos.side.value,
             "size": float(pos.size),
+            "size_usdt": float(pos.size) * float(pos.mark_price) if pos.mark_price else 0,
             "entry_price": float(pos.entry_price),
             "mark_price": float(pos.mark_price),
             "unrealized_pnl": float(pos.unrealized_pnl),
             "unrealized_pnl_pct": float(pos.unrealized_pnl / pos.entry_price * 100) if pos.entry_price else 0,
             "leverage": pos.leverage,
+            "stop_loss": state.sl_tp.get(pos.symbol, {}).get("stop_loss"),
+            "take_profit": state.sl_tp.get(pos.symbol, {}).get("take_profit"),
         }
         for pos in state.positions.values()
     ]
 
 
-def get_dashboard_html() -> str:
-    """Generate dashboard HTML."""
-    return """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Scalper Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        .status-running { color: #16a34a; }
-        .status-stopped { color: #dc2626; }
-        .status-paused { color: #d97706; }
-        .pnl-positive { color: #16a34a; }
-        .pnl-negative { color: #dc2626; }
-        .tab-active { border-bottom: 2px solid #2563eb; color: #2563eb; }
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 50; }
-        .modal.active { display: flex; align-items: center; justify-content: center; }
-        .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 24px; border-radius: 8px; z-index: 100; animation: slideIn 0.3s; color: white; }
-        .toast-success { background: #16a34a; }
-        .toast-error { background: #dc2626; }
-        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
-        .card { background: white; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .btn { color: white !important; }
-        button[class*="bg-green"], button[class*="bg-red"], button[class*="bg-yellow"], button[class*="bg-blue"], button[class*="bg-purple"], button[class*="bg-orange"] { color: white !important; }
-    </style>
-</head>
-<body class="bg-gray-100 text-gray-900 min-h-screen">
-    <!-- Navigation -->
-    <nav class="bg-white border-b border-gray-200 shadow-sm">
-        <div class="container mx-auto px-4">
-            <div class="flex items-center justify-between h-16">
-                <h1 class="text-xl font-bold">🤖 Crypto Scalper Bot</h1>
-                <div class="flex items-center gap-4">
-                    <span id="status" class="px-3 py-1 rounded-full text-sm font-medium bg-gray-200">--</span>
-                    <button onclick="sendCommand('start')" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm">▶ Start</button>
-                    <button onclick="sendCommand('pause')" class="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded text-sm">⏸ Pause</button>
-                    <button onclick="sendCommand('stop')" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm">⏹ Stop</button>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <!-- Tabs -->
-    <div class="bg-white border-b border-gray-200">
-        <div class="container mx-auto px-4">
-            <div class="flex gap-6">
-                <button onclick="showTab('dashboard')" class="tab-btn tab-active py-4 px-2" data-tab="dashboard">📊 Dashboard</button>
-                <button onclick="showTab('trading')" class="tab-btn py-4 px-2 text-gray-500 hover:text-gray-900" data-tab="trading">💹 Trading</button>
-                <button onclick="showTab('strategies')" class="tab-btn py-4 px-2 text-gray-500 hover:text-gray-900" data-tab="strategies">🎯 Strategies</button>
-                <button onclick="showTab('settings')" class="tab-btn py-4 px-2 text-gray-500 hover:text-gray-900" data-tab="settings">⚙️ Settings</button>
-                <button onclick="showTab('logs')" class="tab-btn py-4 px-2 text-gray-500 hover:text-gray-900" data-tab="logs">📋 Logs</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="container mx-auto px-4 py-6">
-        <!-- Dashboard Tab -->
-        <div id="tab-dashboard" class="tab-content">
-            <!-- Metrics Cards -->
-            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-                <div class="card rounded-lg p-4">
-                    <div class="text-gray-500 text-xs">Total P&L</div>
-                    <div id="totalPnl" class="text-xl font-bold">$0.00</div>
-                </div>
-                <div class="card rounded-lg p-4">
-                    <div class="text-gray-500 text-xs">Daily P&L</div>
-                    <div id="dailyPnl" class="text-xl font-bold">$0.00</div>
-                </div>
-                <div class="card rounded-lg p-4">
-                    <div class="text-gray-500 text-xs">Win Rate</div>
-                    <div id="winRate" class="text-xl font-bold">0%</div>
-                </div>
-                <div class="card rounded-lg p-4">
-                    <div class="text-gray-500 text-xs">Trades</div>
-                    <div id="totalTrades" class="text-xl font-bold">0</div>
-                </div>
-                <div class="card rounded-lg p-4">
-                    <div class="text-gray-500 text-xs">Profit Factor</div>
-                    <div id="profitFactor" class="text-xl font-bold">0.00</div>
-                </div>
-                <div class="card rounded-lg p-4">
-                    <div class="text-gray-500 text-xs">Max Drawdown</div>
-                    <div id="maxDrawdown" class="text-xl font-bold text-red-600">0%</div>
-                </div>
-            </div>
-
-            <!-- Main Content -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- Equity Chart -->
-                <div class="lg:col-span-2 card rounded-lg p-4">
-                    <h2 class="text-lg font-semibold mb-4">📈 Equity Curve</h2>
-                    <canvas id="equityChart" height="200"></canvas>
-                </div>
-
-                <!-- Positions -->
-                <div class="card rounded-lg p-4">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-lg font-semibold">📊 Open Positions</h2>
-                        <button onclick="closeAllPositions()" class="text-xs bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-gray-900">Close All</button>
-                    </div>
-                    <div id="positions" class="space-y-2 max-h-64 overflow-y-auto">
-                        <p class="text-gray-500 text-sm">No open positions</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Signals & Trades -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-                <div class="card rounded-lg p-4">
-                    <h2 class="text-lg font-semibold mb-4">⚡ Recent Signals</h2>
-                    <div id="signals" class="space-y-2 max-h-64 overflow-y-auto">
-                        <p class="text-gray-500 text-sm">Waiting for signals...</p>
-                    </div>
-                </div>
-                <div class="card rounded-lg p-4">
-                    <h2 class="text-lg font-semibold mb-4">💰 Recent Trades</h2>
-                    <div id="trades" class="space-y-2 max-h-64 overflow-y-auto">
-                        <p class="text-gray-500 text-sm">No trades yet</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Trading Tab -->
-        <div id="tab-trading" class="tab-content hidden">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <!-- Place Order Form -->
-                <div class="card rounded-lg p-6">
-                    <h2 class="text-lg font-semibold mb-4">📝 Place Order</h2>
-                    <form id="orderForm" class="space-y-4">
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm text-gray-500 mb-1">Symbol</label>
-                                <select id="orderSymbol" class="w-full bg-gray-100 rounded px-3 py-2">
-                                    <option>BTCUSDT</option>
-                                    <option>ETHUSDT</option>
-                                    <option>SOLUSDT</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-sm text-gray-500 mb-1">Side</label>
-                                <div class="flex gap-2">
-                                    <button type="button" onclick="setSide('BUY')" id="buyBtn" class="flex-1 bg-green-600 hover:bg-green-700 py-2 rounded font-medium">BUY</button>
-                                    <button type="button" onclick="setSide('SELL')" id="sellBtn" class="flex-1 bg-gray-100 hover:bg-red-600 py-2 rounded font-medium">SELL</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm text-gray-500 mb-1">Order Type</label>
-                                <select id="orderType" class="w-full bg-gray-100 rounded px-3 py-2" onchange="togglePriceField()">
-                                    <option value="MARKET">Market</option>
-                                    <option value="LIMIT">Limit</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-sm text-gray-500 mb-1">Quantity</label>
-                                <input type="number" id="orderQty" step="0.0001" class="w-full bg-gray-100 rounded px-3 py-2" placeholder="0.001">
-                            </div>
-                        </div>
-                        <div id="priceField" class="hidden">
-                            <label class="block text-sm text-gray-500 mb-1">Price</label>
-                            <input type="number" id="orderPrice" step="0.01" class="w-full bg-gray-100 rounded px-3 py-2" placeholder="50000">
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm text-gray-500 mb-1">Stop Loss (optional)</label>
-                                <input type="number" id="orderSL" step="0.01" class="w-full bg-gray-100 rounded px-3 py-2" placeholder="49000">
-                            </div>
-                            <div>
-                                <label class="block text-sm text-gray-500 mb-1">Take Profit (optional)</label>
-                                <input type="number" id="orderTP" step="0.01" class="w-full bg-gray-100 rounded px-3 py-2" placeholder="51000">
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block text-sm text-gray-500 mb-1">Leverage</label>
-                            <input type="range" id="orderLeverage" min="1" max="50" value="10" class="w-full" oninput="updateLeverageLabel()">
-                            <div class="text-center text-sm"><span id="leverageLabel">10</span>x</div>
-                        </div>
-                        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded font-medium">Place Order</button>
-                    </form>
-                </div>
-
-                <!-- Quick Actions & Position Management -->
-                <div class="space-y-6">
-                    <!-- Set SL/TP -->
-                    <div class="card rounded-lg p-6">
-                        <h2 class="text-lg font-semibold mb-4">🎯 Set SL/TP</h2>
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm text-gray-500 mb-1">Symbol</label>
-                                <select id="sltpSymbol" class="w-full bg-gray-100 rounded px-3 py-2">
-                                    <option>BTCUSDT</option>
-                                    <option>ETHUSDT</option>
-                                </select>
-                            </div>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-sm text-gray-500 mb-1">Stop Loss</label>
-                                    <input type="number" id="slPrice" step="0.01" class="w-full bg-gray-100 rounded px-3 py-2">
-                                </div>
-                                <div>
-                                    <label class="block text-sm text-gray-500 mb-1">Take Profit</label>
-                                    <input type="number" id="tpPrice" step="0.01" class="w-full bg-gray-100 rounded px-3 py-2">
-                                </div>
-                            </div>
-                            <button onclick="setSLTP()" class="w-full bg-purple-600 hover:bg-purple-700 py-2 rounded">Update SL/TP</button>
-                        </div>
-                    </div>
-
-                    <!-- Leverage Settings -->
-                    <div class="card rounded-lg p-6">
-                        <h2 class="text-lg font-semibold mb-4">⚡ Leverage</h2>
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm text-gray-500 mb-1">Symbol</label>
-                                <select id="levSymbol" class="w-full bg-gray-100 rounded px-3 py-2">
-                                    <option>BTCUSDT</option>
-                                    <option>ETHUSDT</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-sm text-gray-500 mb-1">Leverage: <span id="levValue">10</span>x</label>
-                                <input type="range" id="levSlider" min="1" max="125" value="10" class="w-full" oninput="document.getElementById('levValue').textContent=this.value">
-                            </div>
-                            <button onclick="setLeverage()" class="w-full bg-orange-600 hover:bg-orange-700 py-2 rounded">Set Leverage</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Strategies Tab -->
-        <div id="tab-strategies" class="tab-content hidden">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="strategiesGrid">
-                <!-- Strategies will be loaded here -->
-            </div>
-        </div>
-
-        <!-- Settings Tab -->
-        <div id="tab-settings" class="tab-content hidden">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <!-- Risk Settings -->
-                <div class="card rounded-lg p-6">
-                    <h2 class="text-lg font-semibold mb-4">🛡️ Risk Management</h2>
-                    <form id="riskForm" class="space-y-4">
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm text-gray-500 mb-1">Max Position ($)</label>
-                                <input type="number" id="riskMaxPos" class="w-full bg-gray-100 rounded px-3 py-2" value="30">
-                            </div>
-                            <div>
-                                <label class="block text-sm text-gray-500 mb-1">Max Daily Loss ($)</label>
-                                <input type="number" id="riskMaxLoss" class="w-full bg-gray-100 rounded px-3 py-2" value="5">
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm text-gray-500 mb-1">Max Trades/Day</label>
-                                <input type="number" id="riskMaxTrades" class="w-full bg-gray-100 rounded px-3 py-2" value="20">
-                            </div>
-                            <div>
-                                <label class="block text-sm text-gray-500 mb-1">Max Open Positions</label>
-                                <input type="number" id="riskMaxPositions" class="w-full bg-gray-100 rounded px-3 py-2" value="1">
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm text-gray-500 mb-1">Default SL (%)</label>
-                                <input type="number" id="riskSL" step="0.1" class="w-full bg-gray-100 rounded px-3 py-2" value="0.5">
-                            </div>
-                            <div>
-                                <label class="block text-sm text-gray-500 mb-1">Default TP (%)</label>
-                                <input type="number" id="riskTP" step="0.1" class="w-full bg-gray-100 rounded px-3 py-2" value="0.3">
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block text-sm text-gray-500 mb-1">Risk Per Trade (%)</label>
-                            <input type="number" id="riskPerTrade" step="0.1" class="w-full bg-gray-100 rounded px-3 py-2" value="1">
-                        </div>
-                        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded">Save Risk Settings</button>
-                    </form>
-                </div>
-
-                <!-- Exchange Settings -->
-                <div class="card rounded-lg p-6">
-                    <h2 class="text-lg font-semibold mb-4">🏦 Exchange</h2>
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm text-gray-500 mb-1">Exchange</label>
-                            <select id="exchangeSelect" class="w-full bg-gray-100 rounded px-3 py-2">
-                                <option value="binance">Binance</option>
-                                <option value="bybit">Bybit</option>
-                                <option value="okx">OKX</option>
-                                <option value="kraken">Kraken</option>
-                                <option value="kucoin">KuCoin</option>
-                                <option value="gateio">Gate.io</option>
-                            </select>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <input type="checkbox" id="testnetMode" checked class="rounded">
-                            <label for="testnetMode" class="text-sm">Use Testnet</label>
-                        </div>
-                        <button onclick="saveExchange()" class="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded">Save Exchange</button>
-                    </div>
-
-                    <h3 class="text-md font-semibold mt-6 mb-4">📋 Trading Symbols</h3>
-                    <div class="flex flex-wrap gap-2" id="symbolsList">
-                        <span class="bg-blue-600 px-3 py-1 rounded-full text-sm">BTCUSDT</span>
-                        <span class="bg-gray-100 px-3 py-1 rounded-full text-sm cursor-pointer hover:bg-blue-600">ETHUSDT</span>
-                        <span class="bg-gray-100 px-3 py-1 rounded-full text-sm cursor-pointer hover:bg-blue-600">SOLUSDT</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Logs Tab -->
-        <div id="tab-logs" class="tab-content hidden">
-            <div class="card rounded-lg p-4">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-lg font-semibold">📋 System Logs</h2>
-                    <div class="flex gap-2">
-                        <select id="logFilter" class="bg-gray-100 rounded px-3 py-1 text-sm" onchange="loadLogs()">
-                            <option value="">All Levels</option>
-                            <option value="INFO">INFO</option>
-                            <option value="WARNING">WARNING</option>
-                            <option value="ERROR">ERROR</option>
-                        </select>
-                        <button onclick="clearLogs()" class="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm">Clear</button>
-                        <button onclick="loadLogs()" class="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm">Refresh</button>
-                    </div>
-                </div>
-                <div id="logsContainer" class="bg-gray-50 rounded p-4 h-96 overflow-y-auto font-mono text-sm">
-                    <p class="text-gray-500">Loading logs...</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Toast Container -->
-    <div id="toastContainer"></div>
-
-    <script>
-        let ws;
-        let equityChart;
-
-        // Initialize WebSocket
-        function connectWebSocket() {
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
-
-            ws.onopen = () => {
-                console.log('WebSocket connected');
-                ws.send(JSON.stringify({ type: 'subscribe', channels: ['all'] }));
-            };
-
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                handleMessage(data);
-            };
-
-            ws.onclose = () => {
-                console.log('WebSocket disconnected, reconnecting...');
-                setTimeout(connectWebSocket, 3000);
-            };
-        }
-
-        // Handle WebSocket messages
-        function handleMessage(data) {
-            switch (data.type) {
-                case 'initial_state':
-                    updateStatus(data.data.status);
-                    updateMetrics(data.data.metrics);
-                    updatePositions(data.data.positions);
-                    break;
-                case 'status_change':
-                    updateStatus(data.status);
-                    break;
-                case 'metrics_update':
-                    updateMetrics(data.data);
-                    break;
-                case 'position_update':
-                    updatePositions(data.data);
-                    break;
-                case 'signal':
-                    addSignal(data.data);
-                    break;
-                case 'trade':
-                    addTrade(data.data);
-                    break;
-                case 'equity_update':
-                    updateEquityChart(data.data);
-                    break;
-            }
-        }
-
-        // Update UI functions
-        function updateStatus(status) {
-            const statusEl = document.getElementById('status');
-            statusEl.textContent = status.charAt(0).toUpperCase() + status.slice(1);
-            statusEl.className = `text-lg font-medium status-${status}`;
-        }
-
-        function updateMetrics(metrics) {
-            const pnl = metrics.total_pnl || 0;
-            document.getElementById('totalPnl').textContent = `$${pnl.toFixed(2)}`;
-            document.getElementById('totalPnl').className = `text-2xl font-bold ${pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}`;
-            document.getElementById('winRate').textContent = `${(metrics.win_rate || 0).toFixed(1)}%`;
-            document.getElementById('totalTrades').textContent = metrics.total_trades || 0;
-            document.getElementById('profitFactor').textContent = (metrics.profit_factor || 0).toFixed(2);
-        }
-
-        function updatePositions(positions) {
-            const container = document.getElementById('positions');
-            if (!positions || positions.length === 0) {
-                container.innerHTML = '<p class="text-gray-500">No open positions</p>';
-                return;
-            }
-
-            container.innerHTML = positions.map(pos => `
-                <div class="bg-gray-100 rounded p-2">
-                    <div class="flex justify-between items-center">
-                        <span class="font-medium">${pos.symbol}</span>
-                        <span class="${pos.side === 'BUY' ? 'text-green-400' : 'text-red-400'}">${pos.side}</span>
-                    </div>
-                    <div class="flex justify-between text-sm text-gray-500">
-                        <span>Size: ${pos.size}</span>
-                        <span class="${pos.unrealized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
-                            $${pos.unrealized_pnl.toFixed(2)}
-                        </span>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        function addSignal(signal) {
-            const container = document.getElementById('signals');
-            if (container.querySelector('.text-gray-500')) {
-                container.innerHTML = '';
-            }
-
-            const signalEl = document.createElement('div');
-            signalEl.className = 'bg-gray-100 rounded p-2 text-sm';
-            signalEl.innerHTML = `
-                <div class="flex justify-between">
-                    <span class="${signal.type === 'LONG' ? 'text-green-400' : 'text-red-400'}">${signal.type}</span>
-                    <span>${signal.symbol}</span>
-                </div>
-                <div class="text-gray-500">${signal.strategy} (${(signal.strength * 100).toFixed(0)}%)</div>
-            `;
-            container.prepend(signalEl);
-
-            // Keep only last 20 signals
-            while (container.children.length > 20) {
-                container.removeChild(container.lastChild);
-            }
-        }
-
-        function addTrade(trade) {
-            const container = document.getElementById('trades');
-            if (container.querySelector('.text-gray-500')) {
-                container.innerHTML = '';
-            }
-
-            const tradeEl = document.createElement('div');
-            tradeEl.className = 'bg-gray-100 rounded p-2 text-sm';
-            tradeEl.innerHTML = `
-                <div class="flex justify-between">
-                    <span>${trade.symbol}</span>
-                    <span class="${trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">$${trade.pnl.toFixed(2)}</span>
-                </div>
-                <div class="text-gray-500">${trade.side} | ${trade.strategy}</div>
-            `;
-            container.prepend(tradeEl);
-
-            while (container.children.length > 20) {
-                container.removeChild(container.lastChild);
-            }
-        }
-
-        // Initialize chart
-        function initChart() {
-            const ctx = document.getElementById('equityChart').getContext('2d');
-            equityChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Equity',
-                        data: [],
-                        borderColor: '#22c55e',
-                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                        fill: true,
-                        tension: 0.4,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: { display: false },
-                        y: { grid: { color: '#374151' } }
-                    },
-                    plugins: {
-                        legend: { display: false }
-                    }
-                }
-            });
-        }
-
-        function updateEquityChart(data) {
-            if (equityChart && data) {
-                equityChart.data.labels.push(data.timestamp);
-                equityChart.data.datasets[0].data.push(data.equity);
-
-                // Keep last 100 points
-                if (equityChart.data.labels.length > 100) {
-                    equityChart.data.labels.shift();
-                    equityChart.data.datasets[0].data.shift();
-                }
-
-                equityChart.update('none');
-            }
-        }
-
-        // Send command to bot
-        async function sendCommand(command) {
-            try {
-                const response = await fetch('/api/command', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ command })
-                });
-                const data = await response.json();
-                showToast(data.message, 'success');
-            } catch (error) {
-                showToast('Command failed: ' + error, 'error');
-            }
-        }
-
-        // Fetch initial data
-        async function fetchInitialData() {
-            try {
-                const metricsRes = await fetch('/api/metrics');
-                const metrics = await metricsRes.json();
-                updateMetrics(metrics);
-
-                const positionsRes = await fetch('/api/positions');
-                const positions = await positionsRes.json();
-                updatePositions(positions);
-
-                const statusRes = await fetch('/api/status');
-                const status = await statusRes.json();
-                updateStatus(status.status);
-
-                loadStrategies();
-                loadRiskSettings();
-            } catch (error) {
-                console.error('Failed to fetch initial data:', error);
-            }
-        }
-
-        // Tab switching
-        function showTab(tabName) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-            document.querySelectorAll('.tab-btn').forEach(el => {
-                el.classList.remove('tab-active');
-                el.classList.add('text-gray-500');
-            });
-            document.getElementById('tab-' + tabName).classList.remove('hidden');
-            document.querySelector(`[data-tab="${tabName}"]`).classList.add('tab-active');
-            document.querySelector(`[data-tab="${tabName}"]`).classList.remove('text-gray-500');
-
-            if (tabName === 'logs') loadLogs();
-            if (tabName === 'strategies') loadStrategies();
-        }
-
-        // Toast notifications
-        function showToast(message, type = 'success') {
-            const container = document.getElementById('toastContainer');
-            const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
-            toast.textContent = message;
-            container.appendChild(toast);
-            setTimeout(() => toast.remove(), 3000);
-        }
-
-        // Order form state
-        let orderSide = 'BUY';
-
-        function setSide(side) {
-            orderSide = side;
-            document.getElementById('buyBtn').className = side === 'BUY'
-                ? 'flex-1 bg-green-600 hover:bg-green-700 py-2 rounded font-medium'
-                : 'flex-1 bg-gray-100 hover:bg-green-600 py-2 rounded font-medium';
-            document.getElementById('sellBtn').className = side === 'SELL'
-                ? 'flex-1 bg-red-600 hover:bg-red-700 py-2 rounded font-medium'
-                : 'flex-1 bg-gray-100 hover:bg-red-600 py-2 rounded font-medium';
-        }
-
-        function togglePriceField() {
-            const priceField = document.getElementById('priceField');
-            const orderType = document.getElementById('orderType').value;
-            priceField.classList.toggle('hidden', orderType === 'MARKET');
-        }
-
-        function updateLeverageLabel() {
-            document.getElementById('leverageLabel').textContent = document.getElementById('orderLeverage').value;
-        }
-
-        // Place order
-        document.getElementById('orderForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const order = {
-                symbol: document.getElementById('orderSymbol').value,
-                side: orderSide,
-                quantity: parseFloat(document.getElementById('orderQty').value),
-                order_type: document.getElementById('orderType').value,
-                leverage: parseInt(document.getElementById('orderLeverage').value),
-            };
-            if (order.order_type === 'LIMIT') {
-                order.price = parseFloat(document.getElementById('orderPrice').value);
-            }
-            const sl = document.getElementById('orderSL').value;
-            const tp = document.getElementById('orderTP').value;
-            if (sl) order.stop_loss = parseFloat(sl);
-            if (tp) order.take_profit = parseFloat(tp);
-
-            try {
-                const res = await fetch('/api/order', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(order)
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    showToast(`Order placed: ${order.side} ${order.quantity} ${order.symbol}`, 'success');
-                } else {
-                    showToast(data.detail || 'Order failed', 'error');
-                }
-            } catch (err) {
-                showToast('Order failed: ' + err, 'error');
-            }
-        });
-
-        // Set SL/TP
-        async function setSLTP() {
-            const symbol = document.getElementById('sltpSymbol').value;
-            const sl = document.getElementById('slPrice').value;
-            const tp = document.getElementById('tpPrice').value;
-            try {
-                const res = await fetch('/api/sl-tp', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ symbol, stop_loss: sl ? parseFloat(sl) : null, take_profit: tp ? parseFloat(tp) : null })
-                });
-                const data = await res.json();
-                showToast(data.message || 'SL/TP updated', res.ok ? 'success' : 'error');
-            } catch (err) {
-                showToast('Failed to set SL/TP', 'error');
-            }
-        }
-
-        // Set Leverage
-        async function setLeverage() {
-            const symbol = document.getElementById('levSymbol').value;
-            const leverage = parseInt(document.getElementById('levSlider').value);
-            try {
-                const res = await fetch('/api/leverage', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ symbol, leverage })
-                });
-                const data = await res.json();
-                showToast(data.message || 'Leverage updated', res.ok ? 'success' : 'error');
-            } catch (err) {
-                showToast('Failed to set leverage', 'error');
-            }
-        }
-
-        // Close all positions
-        async function closeAllPositions() {
-            if (!confirm('Close ALL positions?')) return;
-            const positions = await fetch('/api/positions').then(r => r.json());
-            for (const pos of positions) {
-                await fetch('/api/position/close', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ symbol: pos.symbol })
-                });
-            }
-            showToast('All positions closed', 'success');
-        }
-
-        // Strategies
-        const scalping_strategies = ['hybrid_scalping', 'advanced_orderbook', 'print_tape', 'cluster_analysis', 'impulse_scalping'];
-        const basic_strategies = ['orderbook_imbalance', 'volume_spike', 'mean_reversion', 'grid_trading', 'dca'];
-
-        function getStrategyIcon(name) {
-            const icons = {
-                'hybrid_scalping': '🎯',
-                'advanced_orderbook': '📊',
-                'print_tape': '📜',
-                'cluster_analysis': '🔬',
-                'impulse_scalping': '⚡',
-                'orderbook_imbalance': '📈',
-                'volume_spike': '📢',
-                'mean_reversion': '🔄',
-                'grid_trading': '📐',
-                'dca': '💰',
-            };
-            return icons[name] || '📌';
-        }
-
-        function formatStrategyName(name) {
-            return name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-        }
-
-        async function loadStrategies() {
-            try {
-                const res = await fetch('/api/strategies');
-                const strategies = await res.json();
-                const grid = document.getElementById('strategiesGrid');
-
-                // Group strategies
-                const scalping = Object.entries(strategies).filter(([n]) => scalping_strategies.includes(n));
-                const basic = Object.entries(strategies).filter(([n]) => basic_strategies.includes(n));
-
-                let html = '';
-
-                // Scalping section
-                html += '<div class="col-span-full"><h2 class="text-xl font-bold mb-4 text-blue-400">🎯 Просунутий Скальпінг</h2></div>';
-                html += scalping.map(([name, config]) => renderStrategyCard(name, config)).join('');
-
-                // Basic section
-                html += '<div class="col-span-full mt-6"><h2 class="text-xl font-bold mb-4 text-gray-500">📊 Базові Стратегії</h2></div>';
-                html += basic.map(([name, config]) => renderStrategyCard(name, config)).join('');
-
-                grid.innerHTML = html;
-            } catch (err) {
-                console.error('Failed to load strategies:', err);
-            }
-        }
-
-        function renderStrategyCard(name, config) {
-            const description = config.description || '';
-            const hasWeight = config.weight !== undefined;
-
-            return `
-                <div class="card rounded-lg p-6 ${config.enabled ? 'border border-green-600/30' : ''}">
-                    <div class="flex justify-between items-start mb-3">
-                        <div>
-                            <h3 class="text-lg font-semibold">${getStrategyIcon(name)} ${formatStrategyName(name)}</h3>
-                            ${description ? `<p class="text-xs text-gray-500 mt-1">${description}</p>` : ''}
-                        </div>
-                        <button onclick="toggleStrategy('${name}')" class="px-3 py-1 rounded text-sm transition-all ${config.enabled ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-100 hover:bg-gray-600'}">
-                            ${config.enabled ? '✓ Увімкнено' : 'Вимкнено'}
-                        </button>
-                    </div>
-                    ${hasWeight ? `<div class="mb-3"><span class="text-xs bg-blue-600/30 text-blue-400 px-2 py-1 rounded">Вага: ${(config.weight * 100).toFixed(0)}%</span></div>` : ''}
-                    <div class="space-y-1 text-sm text-gray-500">
-                        ${Object.entries(config).filter(([k]) => !['enabled', 'description', 'weight'].includes(k)).slice(0, 5).map(([k, v]) => `
-                            <div class="flex justify-between">
-                                <span>${k.replace(/_/g, ' ')}:</span>
-                                <span class="text-gray-900">${typeof v === 'boolean' ? (v ? '✓' : '✗') : v}</span>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `;
-        }
-
-        async function toggleStrategy(name) {
-            try {
-                const res = await fetch(`/api/strategies/${name}/toggle`, { method: 'POST' });
-                const data = await res.json();
-                showToast(data.message, 'success');
-                loadStrategies();
-            } catch (err) {
-                showToast('Failed to toggle strategy', 'error');
-            }
-        }
-
-        // Risk settings
-        async function loadRiskSettings() {
-            try {
-                const res = await fetch('/api/risk');
-                const config = await res.json();
-                document.getElementById('riskMaxPos').value = config.max_position_usd || 30;
-                document.getElementById('riskMaxLoss').value = config.max_daily_loss_usd || 5;
-                document.getElementById('riskMaxTrades').value = config.max_trades_per_day || 20;
-                document.getElementById('riskMaxPositions').value = config.max_open_positions || 1;
-                document.getElementById('riskSL').value = config.default_stop_loss_pct || 0.5;
-                document.getElementById('riskTP').value = config.default_take_profit_pct || 0.3;
-                document.getElementById('riskPerTrade').value = config.risk_per_trade_pct || 1;
-            } catch (err) {
-                console.error('Failed to load risk settings:', err);
-            }
-        }
-
-        document.getElementById('riskForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const config = {
-                max_position_usd: parseFloat(document.getElementById('riskMaxPos').value),
-                max_daily_loss_usd: parseFloat(document.getElementById('riskMaxLoss').value),
-                max_trades_per_day: parseInt(document.getElementById('riskMaxTrades').value),
-                max_open_positions: parseInt(document.getElementById('riskMaxPositions').value),
-                default_stop_loss_pct: parseFloat(document.getElementById('riskSL').value),
-                default_take_profit_pct: parseFloat(document.getElementById('riskTP').value),
-                risk_per_trade_pct: parseFloat(document.getElementById('riskPerTrade').value),
-            };
-            try {
-                const res = await fetch('/api/risk', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(config)
-                });
-                const data = await res.json();
-                showToast(data.message || 'Risk settings saved', res.ok ? 'success' : 'error');
-            } catch (err) {
-                showToast('Failed to save risk settings', 'error');
-            }
-        });
-
-        // Exchange
-        async function saveExchange() {
-            const exchange = document.getElementById('exchangeSelect').value;
-            const testnet = document.getElementById('testnetMode').checked;
-            try {
-                const res = await fetch('/api/exchange', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ exchange, testnet })
-                });
-                const data = await res.json();
-                showToast(data.message || 'Exchange saved', res.ok ? 'success' : 'error');
-            } catch (err) {
-                showToast('Failed to save exchange', 'error');
-            }
-        }
-
-        // Logs
-        async function loadLogs() {
-            try {
-                const level = document.getElementById('logFilter').value;
-                const res = await fetch(`/api/logs?limit=200${level ? '&level=' + level : ''}`);
-                const data = await res.json();
-                const container = document.getElementById('logsContainer');
-                if (data.logs.length === 0) {
-                    container.innerHTML = '<p class="text-gray-500">No logs</p>';
-                    return;
-                }
-                container.innerHTML = data.logs.map(log => {
-                    const color = log.level === 'ERROR' ? 'text-red-400' : log.level === 'WARNING' ? 'text-yellow-400' : 'text-gray-300';
-                    return `<div class="${color}">[${log.timestamp.slice(11, 19)}] [${log.level}] ${log.message}</div>`;
-                }).join('');
-                container.scrollTop = container.scrollHeight;
-            } catch (err) {
-                console.error('Failed to load logs:', err);
-            }
-        }
-
-        async function clearLogs() {
-            await fetch('/api/logs', { method: 'DELETE' });
-            loadLogs();
-            showToast('Logs cleared', 'success');
-        }
-
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
-            initChart();
-            connectWebSocket();
-            fetchInitialData();
-        });
-    </script>
-</body>
-</html>
-"""
-
-
-# =============================================================================
 # Broadcast Functions (for integration with trading engine)
 # =============================================================================
 

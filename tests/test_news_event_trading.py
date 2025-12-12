@@ -382,11 +382,26 @@ class TestEconomicCalendarProvider:
             }
         ]
 
-        with patch("aiohttp.ClientSession") as mock_session:
-            response = AsyncMock()
+        with patch("src.trading.news_event_trading.aiohttp.ClientSession") as mock_session:
+            # Create mock response
+            response = MagicMock()
             response.status = 200
-            response.json = AsyncMock(return_value=mock_response)
-            mock_session.return_value.__aenter__.return_value.get.return_value.__aenter__.return_value = response
+
+            async def mock_json():
+                return mock_response
+            response.json = mock_json
+
+            # Create async context manager for get()
+            get_cm = MagicMock()
+            get_cm.__aenter__ = AsyncMock(return_value=response)
+            get_cm.__aexit__ = AsyncMock(return_value=None)
+
+            # Create async context manager for session
+            session_instance = MagicMock()
+            session_instance.get = MagicMock(return_value=get_cm)
+
+            mock_session.return_value.__aenter__ = AsyncMock(return_value=session_instance)
+            mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             events = await provider_with_key.get_upcoming_events(days_ahead=7)
 
@@ -395,8 +410,13 @@ class TestEconomicCalendarProvider:
     @pytest.mark.asyncio
     async def test_get_upcoming_events_api_error(self, provider_with_key):
         """Test API error falls back to mock."""
-        with patch("aiohttp.ClientSession") as mock_session:
-            mock_session.return_value.__aenter__.return_value.get.side_effect = Exception("API Error")
+        with patch("src.trading.news_event_trading.aiohttp.ClientSession") as mock_session:
+            # Create async context manager for session that raises on get()
+            session_instance = MagicMock()
+            session_instance.get = MagicMock(side_effect=Exception("API Error"))
+
+            mock_session.return_value.__aenter__ = AsyncMock(return_value=session_instance)
+            mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             events = await provider_with_key.get_upcoming_events(days_ahead=7)
 
